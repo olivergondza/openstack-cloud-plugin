@@ -1,5 +1,6 @@
 package jenkins.plugins.openstack.compute;
 
+import hudson.util.ComboBoxModel;
 import hudson.util.FormValidation;
 import static hudson.util.FormValidation.Kind.*;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -10,6 +11,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -28,11 +30,13 @@ import org.jvnet.hudson.test.Issue;
 import org.openstack4j.api.OSClient;
 import org.openstack4j.api.exceptions.AuthenticationException;
 import org.openstack4j.api.image.ImageService;
+import org.openstack4j.model.compute.ext.AvailabilityZone;
 import org.openstack4j.model.image.Image;
-import org.openstack4j.openstack.image.domain.GlanceImage;
+import org.openstack4j.model.storage.block.VolumeSnapshot;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +47,7 @@ import java.util.concurrent.Callable;
  * @author ogondza.
  */
 public class SlaveOptionsDescriptorTest {
+    private static final FormValidation VALIDATION_REQUIRED = FormValidation.error(hudson.util.Messages.FormValidation_ValidateRequired());
 
     public @Rule PluginTestRule j = new PluginTestRule();
 
@@ -109,7 +114,7 @@ public class SlaveOptionsDescriptorTest {
         assertThat(d.doCheckRetentionTime("err", "1"), hasState(ERROR, "Not a number"));
     }
 
-    public TypeSafeMatcher<FormValidation> hasState(final FormValidation.Kind kind, final String msg) {
+    public static TypeSafeMatcher<FormValidation> hasState(final FormValidation.Kind kind, final String msg) {
         return new TypeSafeMatcher<FormValidation>() {
             @Override
             public void describeTo(Description description) {
@@ -128,27 +133,65 @@ public class SlaveOptionsDescriptorTest {
         };
     }
 
+    public static TypeSafeMatcher<FormValidation> hasState(final FormValidation expected) {
+        return new TypeSafeMatcher<FormValidation>() {
+            @Override
+            public void describeTo(Description description) {
+                description.appendText(expected.kind.toString() + ": " + expected.getMessage());
+            }
+
+            @Override
+            protected void describeMismatchSafely(FormValidation item, Description mismatchDescription) {
+                mismatchDescription.appendText(item.kind + ": " + item.getMessage());
+            }
+
+            @Override
+            protected boolean matchesSafely(FormValidation item) {
+                return expected.kind.equals(item.kind) && Objects.equals(item.getMessage(), expected.getMessage());
+            }
+        };
+    }
+
     @Test
-    public void populateImageNamesNotIds() {
-        Image image = new GlanceImage();
-        image.setId("image-id");
-        image.setName("image-name");
+    public void doFillImageIdItemsPopulatesImageNamesNotIds() {
+        Image image = mock(Image.class);
+        when(image.getId()).thenReturn("image-id");
+        when(image.getName()).thenReturn("image-name");
 
         Openstack os = j.fakeOpenstackFactory();
-        doReturn(Collections.singletonList(image)).when(os).getSortedImages();
+        doReturn(Collections.singletonMap("image-name", Collections.singletonList(image))).when(os).getImages();
 
-        ListBoxModel list = d.doFillImageIdItems("not-needed", "", "", "", "");
-        assertEquals(2, list.size());
+        ListBoxModel list = d.doFillImageIdItems(JCloudsCloud.BootSource.IMAGE.name(), "", "not-needed", "OSurl", "OSid", "OSpwd", "OSzone");
+        assertEquals(3, list.size());
         ListBoxModel.Option item = list.get(1);
-        assertEquals("image-name", item.name);
-        assertEquals("image-name", item.value);
+        assertEquals(JCloudsCloud.BootSource.IMAGE.toDisplayName() + " " + image.getName(), item.name);
+        assertEquals(image.getName(), item.value);
+    }
+
+    @Test
+    public void doFillImageIdItemsPopulatesVolumeSnapshotNames() {
+        VolumeSnapshot volumeSnapshot = mock(VolumeSnapshot.class);
+        when(volumeSnapshot.getId()).thenReturn("vs-id");
+        when(volumeSnapshot.getName()).thenReturn("vs-name");
+        final Collection<VolumeSnapshot> justVolumeSnapshot = Collections.singletonList(volumeSnapshot);
+
+        Openstack os = j.fakeOpenstackFactory();
+        when(os.getVolumeSnapshots()).thenReturn(Collections.singletonMap("vs-name", justVolumeSnapshot));
+
+        ListBoxModel list = d.doFillImageIdItems(JCloudsCloud.BootSource.VOLUMESNAPSHOT.name(), "", "existing-vs-name", "OSurl", "OSid", "OSpwd", "OSzone");
+        assertEquals(3, list.size());
+        assertEquals("First menu entry is 'nothing selected'", "", list.get(0).value);
+        assertEquals("Second menu entry is the VS OpenStack can see", JCloudsCloud.BootSource.VOLUMESNAPSHOT.toDisplayName() + " vs-name", list.get(1).name);
+        assertEquals("Second menu entry is the VS OpenStack can see", "vs-name", list.get(1).value);
+        assertEquals("Third menu entry is the existing value", "existing-vs-name", list.get(2).name);
+        assertEquals("Third menu entry is the existing value", "existing-vs-name", list.get(2).value);
     }
 
     @Test @Issue("JENKINS-29993")
-    public void acceptNullAsImageName() {
-        Image image = new GlanceImage();
-        image.setId("image-id");
-        image.setName(null);
+    public void doFillImageIdItemsAcceptsNullAsImageName() {
+        Image image = mock(Image.class);
+        when(image.getId()).thenReturn("image-id");
+        when(image.getName()).thenReturn(null);
 
         OSClient osClient = mock(OSClient.class);
         ImageService imageService = mock(ImageService.class);
@@ -157,15 +200,225 @@ public class SlaveOptionsDescriptorTest {
 
         j.fakeOpenstackFactory(new Openstack(osClient));
 
-        ListBoxModel list = d.doFillImageIdItems("not-needed", "", "", "", "");
+        ListBoxModel list = d.doFillImageIdItems(JCloudsCloud.BootSource.IMAGE.name(), "", "", "OSurl", "OSid", "OSpwd", "OSzone");
         assertThat(list.get(0).name, list, Matchers.<ListBoxModel.Option>iterableWithSize(2));
         assertEquals(2, list.size());
         ListBoxModel.Option item = list.get(1);
-        assertEquals("image-id", item.name);
+        assertEquals(JCloudsCloud.BootSource.IMAGE.toDisplayName()+" image-id", item.name);
         assertEquals("image-id", item.value);
 
         verify(imageService).listAll();
         verifyNoMoreInteractions(imageService);
+    }
+
+    @Test
+    public void doCheckImageIdWhenNoValueSet() throws Exception {
+        final String urlC, urlT, idC, idT, credC, credT, zoneC, zoneT;
+        urlC= urlT= idC= idT= credC= credT= zoneC= zoneT= "dummy";
+        final String bootFromImage, bootFromImageByDefault;
+        bootFromImage= bootFromImageByDefault = JCloudsCloud.BootSource.IMAGE.name();
+        final FormValidation expected = VALIDATION_REQUIRED;
+
+        final FormValidation actual = d.doCheckImageId("", "", bootFromImage, bootFromImageByDefault, urlC, urlT, idC, idT, credC, credT, zoneC, zoneT);
+        assertThat(actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckImageIdWhenDefaultAvailable() throws Exception {
+        final String urlC, urlT, idC, idT, credC, credT, zoneC, zoneT;
+        urlC= urlT= idC= idT= credC= credT= zoneC= zoneT= "dummy";
+        final String bootFromImageByDefault;
+        bootFromImageByDefault = JCloudsCloud.BootSource.IMAGE.name();
+        final FormValidation expected = FormValidation.ok("Inherited value: aCloudDefault");
+
+        final FormValidation actual = d.doCheckImageId("", "aCloudDefault", "", bootFromImageByDefault, urlC, urlT, idC, idT, credC, credT, zoneC, zoneT);
+        assertThat(actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckImageIdWhenDefaultAvailableForSameBootSource() throws Exception {
+        final String urlC, urlT, idC, idT, credC, credT, zoneC, zoneT;
+        urlC= urlT= idC= idT= credC= credT= zoneC= zoneT= "dummy";
+        final String bootFromImage, bootFromImageByDefault;
+        bootFromImage= bootFromImageByDefault = JCloudsCloud.BootSource.IMAGE.name();
+        final FormValidation expected = FormValidation.ok("Inherited value: aCloudDefault");
+
+        final FormValidation actual = d.doCheckImageId("", "aCloudDefault", bootFromImage, bootFromImageByDefault, urlC, urlT, idC, idT, credC, credT, zoneC, zoneT);
+        assertThat(actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckImageIdWhenDefaultSetButForWrongBootSource() throws Exception {
+        final String urlC, urlT, idC, idT, credC, credT, zoneC, zoneT;
+        urlC= urlT= idC= idT= credC= credT= zoneC= zoneT= "dummy";
+        final String bootFromImage, bootFromVSByDefault;
+        bootFromImage = JCloudsCloud.BootSource.IMAGE.name();
+        bootFromVSByDefault = JCloudsCloud.BootSource.VOLUMESNAPSHOT.name();
+        final FormValidation expected = VALIDATION_REQUIRED;
+
+        final FormValidation actual = d.doCheckImageId("", "aCloudDefaultVS", bootFromImage, bootFromVSByDefault, urlC, urlT, idC, idT, credC, credT, zoneC, zoneT);
+        assertThat(actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckImageIdWhenImageIsNotFoundInOpenstack() throws Exception {
+        final String urlC, urlT, idC, idT, credC, credT, zoneC, zoneT;
+        urlC= urlT= idC= idT= credC= credT= zoneC= zoneT= "dummy";
+        final String bootFromImage;
+        bootFromImage= JCloudsCloud.BootSource.IMAGE.name();
+        final Openstack os = mock(Openstack.class);
+        when(os.getImageIdsFor("imageNotFound")).thenReturn(Collections.EMPTY_LIST);
+        j.fakeOpenstackFactory(os);
+        final FormValidation expected = FormValidation.error(JCloudsCloud.BootSource.IMAGE.toDisplayName()+" \"imageNotFound\" not found.");
+
+        final FormValidation actual = d.doCheckImageId("imageNotFound", "", bootFromImage, "", urlC, urlT, idC, idT, credC, credT, zoneC, zoneT);
+        assertThat(actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckImageIdWhenOneImageIsFound() throws Exception {
+        final String urlC, urlT, idC, idT, credC, credT, zoneC, zoneT;
+        urlC= urlT= idC= idT= credC= credT= zoneC= zoneT= "dummy";
+        final String bootFromImage;
+        bootFromImage= JCloudsCloud.BootSource.IMAGE.name();
+        final Openstack os = mock(Openstack.class);
+        when(os.getImageIdsFor("imageFound")).thenReturn(Collections.singletonList("imageFoundId"));
+        j.fakeOpenstackFactory(os);
+        final FormValidation expected = FormValidation.ok();
+
+        final FormValidation actual = d.doCheckImageId("imageFound", "", bootFromImage, "", urlC, urlT, idC, idT, credC, credT, zoneC, zoneT);
+        assertThat(actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckImageIdWhenMultipleImagesAreFoundForTheName() throws Exception {
+        final String urlC, urlT, idC, idT, credC, credT, zoneC, zoneT;
+        urlC= urlT= idC= idT= credC= credT= zoneC= zoneT= "dummy";
+        final String bootFromImage;
+        bootFromImage= JCloudsCloud.BootSource.IMAGE.name();
+        final Openstack os = mock(Openstack.class);
+        when(os.getImageIdsFor("imageAmbiguous")).thenReturn(Arrays.asList("imageAmbiguousId1", "imageAmbiguousId2"));
+        j.fakeOpenstackFactory(os);
+        final FormValidation expected = FormValidation.warning(JCloudsCloud.BootSource.IMAGE.toDisplayName()+" \"imageAmbiguous\" is ambiguous.");
+
+        final FormValidation actual = d.doCheckImageId("imageAmbiguous", "", bootFromImage, "", urlC, urlT, idC, idT, credC, credT, zoneC, zoneT);
+        assertThat("imageAmbiguous", actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckImageIdWhenOneVolumeSnapshotIsFound() throws Exception {
+        final String urlC, urlT, idC, idT, credC, credT, zoneC, zoneT;
+        urlC= urlT= idC= idT= credC= credT= zoneC= zoneT= "dummy";
+        final String bootFromVS;
+        bootFromVS= JCloudsCloud.BootSource.VOLUMESNAPSHOT.name();
+        final Openstack os = mock(Openstack.class);
+        when(os.getVolumeSnapshotIdsFor("vsFound")).thenReturn(Collections.singletonList("vsFoundId"));
+        j.fakeOpenstackFactory(os);
+        final FormValidation expected = FormValidation.ok();
+
+        final FormValidation actual = d.doCheckImageId("vsFound", "", bootFromVS, "", urlC, urlT, idC, idT, credC, credT, zoneC, zoneT);
+        assertThat("vsFound", actual, hasState(expected));
+    }
+
+    @Test
+    public void doFillAvailabilityZoneItemsGivenAZsThenPopulatesList() {
+        final AvailabilityZone az1 = mock(AvailabilityZone.class, "az1");
+        final AvailabilityZone az2 = mock(AvailabilityZone.class, "az2");
+        when(az1.getZoneName()).thenReturn("az1Name");
+        when(az2.getZoneName()).thenReturn("az2Name");
+        final List<AvailabilityZone> azs = Arrays.asList(az1, az2);
+        final Openstack os = j.fakeOpenstackFactory();
+        doReturn(azs).when(os).getAvailabilityZones();
+
+        final ComboBoxModel actual = d.doFillAvailabilityZoneItems("az2Name", "OSurl", "OSid", "OSpwd", "OSzone");
+
+        assertEquals(2, actual.size());
+        final String az1Option = actual.get(0);
+        assertThat(az1Option, equalTo("az1Name"));
+        final String az2Option = actual.get(1);
+        assertThat(az2Option, equalTo("az2Name"));
+    }
+
+    @Test
+    public void doFillAvailabilityZoneItemsGivenNoSupportForAZsThenGivesEmptyList() {
+        final Openstack os = j.fakeOpenstackFactory();
+        doThrow(new RuntimeException("OpenStack said no")).when(os).getAvailabilityZones();
+
+        final ComboBoxModel actual = d.doFillAvailabilityZoneItems("az2Name", "OSurl", "OSid", "OSpwd", "OSzone");
+
+        assertEquals(0, actual.size());
+    }
+
+    @Test
+    public void doCheckAvailabilityZoneGivenAZThenReturnsOK() throws Exception {
+        final String value = "chosenAZ";
+        final String def = "";
+        final Openstack os = j.fakeOpenstackFactory();
+        final FormValidation expected = FormValidation.ok();
+
+        final FormValidation actual = d.doCheckAvailabilityZone(value, def, "OSurl", "OSurl", "OSid", "OSid", "OSpwd", "OSpwd", "OSzone", "OSzone");
+
+        assertThat(actual, hasState(expected));
+        verifyNoMoreInteractions(os);
+    }
+
+    @Test
+    public void doCheckAvailabilityZoneGivenDefaultAZThenReturnsOKWithDefault() throws Exception {
+        final String value = "";
+        final String def = "defaultAZ";
+        final Openstack os = j.fakeOpenstackFactory();
+
+        final FormValidation actual = d.doCheckAvailabilityZone(value, def, "OSurl", "OSurl", "OSid", "OSid", "OSpwd", "OSpwd", "OSzone", "OSzone");
+
+        assertThat(actual, hasState(OK, "Inherited value: " + def));
+        verifyNoMoreInteractions(os);
+    }
+
+    @Test
+    public void doCheckAvailabilityZoneGivenNoAZAndOnlyOneZoneToChooseFromThenReturnsOK() throws Exception {
+        final AvailabilityZone az1 = mock(AvailabilityZone.class, "az1");
+        when(az1.getZoneName()).thenReturn("az1Name");
+        final List<AvailabilityZone> azs = Arrays.asList(az1);
+        final Openstack os = j.fakeOpenstackFactory();
+        doReturn(azs).when(os).getAvailabilityZones();
+        final String value = "";
+        final String def = "";
+        final FormValidation expected = FormValidation.ok();
+
+        final FormValidation actual = d.doCheckAvailabilityZone(value, def, "OSurl", "OSurl", "OSid", "OSid", "OSpwd", "OSpwd", "OSzone", "OSzone");
+
+        assertThat(actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckAvailabilityZoneGivenNoAZAndNoSupportForAZsThenReturnsOK() throws Exception {
+        final Openstack os = j.fakeOpenstackFactory();
+        doThrow(new RuntimeException("OpenStack said no")).when(os).getAvailabilityZones();
+        final String value = "";
+        final String def = "";
+        final FormValidation expected = FormValidation.ok();
+
+        final FormValidation actual = d.doCheckAvailabilityZone(value, def, "OSurl", "OSurl", "OSid", "OSid", "OSpwd", "OSpwd", "OSzone", "OSzone");
+
+        assertThat(actual, hasState(expected));
+    }
+
+    @Test
+    public void doCheckAvailabilityZoneGivenNoAZAndMultipleZoneToChooseFromThenReturnsWarning() throws Exception {
+        final AvailabilityZone az1 = mock(AvailabilityZone.class, "az1");
+        final AvailabilityZone az2 = mock(AvailabilityZone.class, "az2");
+        when(az1.getZoneName()).thenReturn("az1Name");
+        when(az2.getZoneName()).thenReturn("az2Name");
+        final List<AvailabilityZone> azs = Arrays.asList(az1, az2);
+        final Openstack os = j.fakeOpenstackFactory();
+        doReturn(azs).when(os).getAvailabilityZones();
+        final String value = "";
+        final String def = "";
+        final FormValidation expected = FormValidation.warning("Ambiguity warning: Multiple zones found.");
+
+        final FormValidation actual = d.doCheckAvailabilityZone(value, def, "OSurl", "OSurl", "OSid", "OSid", "OSpwd", "OSpwd", "OSzone", "OSzone");
+
+        assertThat(actual, hasState(expected));
     }
 
     @Test
@@ -176,11 +429,15 @@ public class SlaveOptionsDescriptorTest {
                 "../credential", "../../credential",
                 "../zone", "../../zone"
         );
+        List<String> expectedImageId = new ArrayList<String>();
+        expectedImageId.add("bootSource");
+        expectedImageId.add("../../slaveOptions/copyOfBootSource");
+        expectedImageId.addAll(expected);
 
         assertThat(getFillDependencies("keyPairName"), equalTo(expected));
         assertThat(getFillDependencies("floatingIpPool"), equalTo(expected));
         assertThat(getFillDependencies("hardwareId"), equalTo(expected));
-        assertThat(getFillDependencies("imageId"), equalTo(expected));
+        assertThat(getFillDependencies("imageId"), equalTo(expectedImageId));
         assertThat(getFillDependencies("networkId"), equalTo(expected));
 
         assertFillWorks("floatingIpPool");
@@ -196,8 +453,8 @@ public class SlaveOptionsDescriptorTest {
         final String CREDENTIAL = "CREDENTIAL";
         final String REGION = "REGION";
         final String QUERY_STRING = String.format(
-                "?endPointUrl=%s&identity=%s&credential=%s&zone=%s",
-                END_POINT, IDENTITY, CREDENTIAL, REGION
+                "?endPointUrl=%s&identity=%s&credential=%s&zone=%s&bootSource=%s",
+                END_POINT, IDENTITY, CREDENTIAL, REGION, JCloudsCloud.BootSource.IMAGE
         );
 
         String contextPath = j.getURL().getFile();

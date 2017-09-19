@@ -10,6 +10,7 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,8 @@ import hudson.slaves.NodeProvisioner;
 import hudson.util.FormValidation;
 import jenkins.plugins.openstack.compute.SlaveOptions;
 import jenkins.plugins.openstack.compute.UserDataConfig;
+import jenkins.plugins.openstack.compute.JCloudsCloud.BootSource;
+
 import org.jenkinsci.lib.configprovider.ConfigProvider;
 import org.jenkinsci.lib.configprovider.model.Config;
 import org.jenkinsci.plugins.resourcedisposer.AsyncResourceDisposer;
@@ -101,6 +104,7 @@ public final class PluginTestRule extends JenkinsRule {
         );
         // Use some real-looking values preserving defaults to make sure plugin works with them
         return JCloudsCloud.DescriptorImpl.getDefaultOptions().getBuilder()
+                .bootSource(BootSource.IMAGE)
                 .imageId("dummyImageId")
                 .hardwareId("dummyHardwareId")
                 .networkId("dummyNetworkId")
@@ -360,6 +364,7 @@ public final class PluginTestRule extends JenkinsRule {
             when(server.getAddresses()).thenReturn(new NovaAddresses());
             when(server.getStatus()).thenReturn(Server.Status.ACTIVE);
             when(server.getMetadata()).thenReturn(metadata);
+            when(server.getOsExtendedVolumesAttached()).thenReturn(Collections.singletonList(UUID.randomUUID().toString()));
             metadata.put("jenkins-instance", jenkins.getRootUrl()); // Mark the slave as ours
         }
 

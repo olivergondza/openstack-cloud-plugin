@@ -45,9 +45,10 @@ import java.io.Serializable;
  */
 public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     private static final long serialVersionUID = -1L;
-    private static final SlaveOptions EMPTY = new SlaveOptions(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    private static final SlaveOptions EMPTY = new SlaveOptions(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
 
     // Provisioning attributes
+    private final @CheckForNull JCloudsCloud.BootSource bootSource;
     private final @CheckForNull String imageId;
     private final @CheckForNull String hardwareId;
     private final @CheckForNull String networkId;
@@ -71,6 +72,10 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
 
     public @CheckForNull String getFsRoot() {
         return fsRoot;
+    }
+
+    public @CheckForNull JCloudsCloud.BootSource getBootSource() {
+        return bootSource;
     }
 
     public @CheckForNull String getImageId() {
@@ -135,6 +140,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
 
     public SlaveOptions(Builder b) {
         this(
+                b.bootSource,
                 b.imageId,
                 b.hardwareId,
                 b.networkId,
@@ -156,6 +162,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
 
     @DataBoundConstructor @Restricted(NoExternalUse.class)
     public SlaveOptions(
+            JCloudsCloud.BootSource bootSource,
             String imageId,
             String hardwareId,
             String networkId,
@@ -173,6 +180,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
             JCloudsCloud.SlaveType slaveType,
             Integer retentionTime
     ) {
+        this.bootSource = bootSource;
         this.imageId = Util.fixEmpty(imageId);
         this.hardwareId = Util.fixEmpty(hardwareId);
         this.networkId = Util.fixEmpty(networkId);
@@ -196,6 +204,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
      */
     public @Nonnull SlaveOptions override(@Nonnull SlaveOptions o) {
         return new Builder()
+                .bootSource(_override(this.bootSource, o.bootSource))
                 .imageId(_override(this.imageId, o.imageId))
                 .hardwareId(_override(this.hardwareId, o.hardwareId))
                 .networkId(_override(this.networkId, o.networkId))
@@ -224,8 +233,13 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
      * Derive new options from current leaving <tt>null</tt> where same as default.
      */
     public @Nonnull SlaveOptions eraseDefaults(@Nonnull SlaveOptions defaults) {
-        return new Builder()
-                .imageId(_erase(this.imageId, defaults.imageId))
+        final Builder builder = new Builder();
+        // we only erase imageId or bootSource if we can erase both of them
+        if (_erase(this.bootSource, defaults.bootSource) != null || _erase(this.imageId, defaults.imageId) != null) {
+            builder.bootSource(this.bootSource);
+            builder.imageId(this.imageId);
+        }
+        return builder
                 .hardwareId(_erase(this.hardwareId, defaults.hardwareId))
                 .networkId(_erase(this.networkId, defaults.networkId))
                 .userDataId(_erase(this.userDataId, defaults.userDataId))
@@ -245,6 +259,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
         ;
     }
 
+    /** Returns null if our <tt>base</tt> value is the same as the <tt>def</tt>ault value. */
     private @CheckForNull <T> T _erase(@CheckForNull T base, @CheckForNull T def) {
         if (def == null) return base;
         if (def.equals(base)) return null;
@@ -254,6 +269,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     @Override
     public String toString() {
         return new ToStringBuilder(this)
+                .append("bootSource", bootSource)
                 .append("imageId", imageId)
                 .append("hardwareId", hardwareId)
                 .append("networkId", networkId)
@@ -281,6 +297,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
 
         SlaveOptions that = (SlaveOptions) o;
 
+        if (bootSource != null ? !bootSource.equals(that.bootSource) : that.bootSource != null) return false;
         if (imageId != null ? !imageId.equals(that.imageId) : that.imageId != null) return false;
         if (hardwareId != null ? !hardwareId.equals(that.hardwareId) : that.hardwareId != null) return false;
         if (networkId != null ? !networkId.equals(that.networkId) : that.networkId != null) return false;
@@ -302,7 +319,8 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
 
     @Override
     public int hashCode() {
-        int result = imageId != null ? imageId.hashCode() : 0;
+        int result = bootSource != null ? bootSource.hashCode() : 0;
+        result = 31 * result + (imageId != null ? imageId.hashCode() : 0);
         result = 31 * result + (hardwareId != null ? hardwareId.hashCode() : 0);
         result = 31 * result + (networkId != null ? networkId.hashCode() : 0);
         result = 31 * result + (userDataId != null ? userDataId.hashCode() : 0);
@@ -326,6 +344,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
      */
     public Builder getBuilder() {
         return new Builder()
+                .bootSource(bootSource)
                 .imageId(imageId)
                 .hardwareId(hardwareId)
                 .networkId(networkId)
@@ -357,6 +376,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     }
 
     public static final class Builder {
+        private @CheckForNull JCloudsCloud.BootSource bootSource;
         private @CheckForNull String imageId;
         private @CheckForNull String hardwareId;
         private @CheckForNull String networkId;
@@ -380,6 +400,11 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
 
         public @Nonnull SlaveOptions build() {
             return new SlaveOptions(this);
+        }
+
+        public @Nonnull Builder bootSource(JCloudsCloud.BootSource bootSource) {
+            this.bootSource = bootSource;
+            return this;
         }
 
         public @Nonnull Builder imageId(String imageId) {
@@ -464,7 +489,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     }
 
     /**
-     * Interface to be implemented by configurable entity that contians options for provisioned slave.
+     * Interface to be implemented by configurable entity that contains options for provisioned slave.
      *
      * By default, this is implemented by cloud and template where templates inherit from cloud.
      */

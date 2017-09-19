@@ -57,7 +57,12 @@ import hudson.util.Secret;
 import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
 import jenkins.plugins.openstack.compute.internal.Openstack;
+import org.openstack4j.api.Builders;
+import org.openstack4j.model.compute.BDMDestType;
+import org.openstack4j.model.compute.BDMSourceType;
 import org.openstack4j.model.compute.Server;
+import org.openstack4j.model.compute.builder.BlockDeviceMappingBuilder;
+import org.openstack4j.model.compute.builder.ServerCreateBuilder;
 
 /**
  * The JClouds version of the Jenkins Cloud.
@@ -173,6 +178,153 @@ public class JCloudsCloud extends Cloud implements SlaveOptions.Holder {
          * This is guaranteed to be called after server is/was ACTIVE.
          */
         public abstract boolean isReady(@Nonnull JCloudsSlave slave);
+    }
+
+    public enum BootSource {
+        IMAGE {
+            public String toDisplayName() { return "Image"; }
+
+            @Override
+            public List<String> listAllNames(Openstack openstack) {
+                final Map<String, ?> images = openstack.getImages();
+                final List<String> allNames = new ArrayList<String>(images.size());
+                allNames.addAll(images.keySet());
+                return allNames;
+            }
+
+            @Override
+            public List<String> findMatchingIds(Openstack openstack, String nameOrId) {
+                return openstack.getImageIdsFor(nameOrId);
+            }
+
+            @Override
+            public void setServerBootSource(ServerCreateBuilder builder,  String id) {
+                builder.image(id);
+            }
+
+            @Override
+            public void afterProvisioning(Server server, Openstack openstack, String id) {
+            }
+        },
+        VOLUMESNAPSHOT {
+            public String toDisplayName() { return "Volume Snapshot"; }
+
+            @Override
+            public List<String> listAllNames(Openstack openstack) {
+                final Map<String, ?> images = openstack.getVolumeSnapshots();
+                final List<String> allNames = new ArrayList<String>(images.size());
+                allNames.addAll(images.keySet());
+                return allNames;
+            }
+
+            @Override
+            public List<String> findMatchingIds(Openstack openstack, String nameOrId) {
+                return openstack.getVolumeSnapshotIdsFor(nameOrId);
+            }
+
+            @Override
+            public void setServerBootSource(ServerCreateBuilder builder, String id) {
+                BlockDeviceMappingBuilder volumeBuilder = Builders.blockDeviceMapping()
+                        .sourceType(BDMSourceType.SNAPSHOT)
+                        .destinationType(BDMDestType.VOLUME)
+                        .uuid(id)
+                        .deleteOnTermination(true)
+                        .bootIndex(0);
+                builder.blockDevice(volumeBuilder.build());
+            }
+
+            @Override
+            public void afterProvisioning(Server server, Openstack openstack, String id) {
+                /*
+                 * OpenStack creates a Volume for the Instance to boot from but
+                 * it does not give that Volume a name or description. We do
+                 * this so that humans can recognize those Volumes.
+                 */
+                final List<String> volumeIds = server.getOsExtendedVolumesAttached();
+                final String instanceId = server.getId();
+                final String instanceName = server.getName();
+                int i = 0;
+                final String newVolumeDescription = "For " + instanceName + " (" + instanceId
+                        + "), from VolumeSnapshot " + id + ".";
+                for (final String volumeId : volumeIds) {
+                    final String newVolumeName = instanceName + '[' + (i++) + ']';
+                    openstack.setVolumeNameAndDescription(volumeId, newVolumeName, newVolumeDescription);
+                }
+            }
+        };
+        /** Human-readable name of this kind of {@link BootSource}. */
+        public abstract String toDisplayName();
+
+        /**
+         * Lists all the names (of this kind of {@link BootSource}) that the
+         * user could choose between.
+         * 
+         * @param openstack
+         *            Means of communicating with the OpenStack service.
+         */
+        public abstract List<String> listAllNames(Openstack openstack);
+
+        /**
+         * Lists all the IDs (of this kind of {@link BootSource}) matching the
+         * given nameOrId.
+         * 
+         * @param openstack
+         *            Means of communicating with the OpenStack service.
+         * @param nameOrId
+         *            The user's selected name (or ID). This is most likely a
+         *            value previously returned by
+         *            {@link #listAllNames(Openstack)}.
+         */
+        public abstract List<String> findMatchingIds(Openstack openstack, String nameOrId);
+
+        /**
+         * Configures the given {@link ServerCreateBuilder} to specify that the
+         * newly provisioned server should boot from the specified ID.
+         * 
+         * @param builder
+         *            The server specification that is under construction. This
+         *            will be amended.
+         * @param id
+         *            The ID (of this kind of {@link BootSource}) that the
+         *            server should boot from. This is most likely a value
+         *            previously returned by
+         *            {@link #findMatchingIds(Openstack, String)}.
+         */
+        public abstract void setServerBootSource(ServerCreateBuilder builder, String id);
+
+        /**
+         * Called after a server has been provisioned.
+         * 
+         * @param server
+         *            The newly-provisioned server.
+         * @param openstack
+         *            Means of communicating with the OpenStack service.
+         * @param id
+         *            The ID (of this kind of {@link BootSource}) that was
+         *            previously passed to
+         *            {@link #setServerBootSource(ServerCreateBuilder, String)}.
+         */
+        public abstract void afterProvisioning(Server server, Openstack openstack, String id);
+
+        /**
+         * Turns a string into an enum value.
+         * <p>
+         * Note: Unlike {@link #valueOf(String)} this returns null on failure.
+         * 
+         * @param s
+         *            The string form. This may be null.
+         * @return The enum whose {@link #name()}==s, or null if none match.
+         */
+        public static @CheckForNull BootSource fromString(String s) {
+            final String sOrNull = Util.fixEmpty(s);
+            if (sOrNull != null) {
+                for (final BootSource i : values()) {
+                    if (sOrNull.equals(i.name()))
+                        return i;
+                }
+            }
+            return null;
+        }
     }
 
     public static @Nonnull List<JCloudsCloud> getClouds() {

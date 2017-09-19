@@ -131,7 +131,7 @@ public class ProvisioningTest {
         verify(os, times(2)).updateInfo(any(Server.class));
         verify(os, atLeastOnce()).destroyServer(any(Server.class));
         verify(os, atLeastOnce()).getServerById(any(String.class));
-        verify(os, atLeastOnce()).getImageIdFor(any(String.class));
+        verify(os, atLeastOnce()).getImageIdsFor(any(String.class));
 
         verifyNoMoreInteractions(os);
 
@@ -277,7 +277,7 @@ public class ProvisioningTest {
 
         Openstack os = cloud.getOpenstack();
         // simulate same image resolved to different ids
-        when(os.getImageIdFor(eq("image-id"))).thenReturn("image-id", "something-else");
+        when(os.getImageIdsFor(eq("image-id"))).thenReturn(Collections.singletonList("image-id")).thenReturn(Collections.singletonList("something-else"));
 
         j.provision(cloud, "label"); j.provision(cloud, "label");
 

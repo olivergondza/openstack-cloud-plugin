@@ -13,13 +13,14 @@ public class SlaveOptionsTest {
      * Reusable options instance guaranteed not to collide with defaults
      */
     public static final SlaveOptions CUSTOM = new SlaveOptions(
-            "img", "hw", "nw", "ud", 1, "pool", "sg", "az", 1, null, 10, "jvmo", "fsRoot", "cid", JCloudsCloud.SlaveType.JNLP, 1
+            JCloudsCloud.BootSource.VOLUMESNAPSHOT, "img", "hw", "nw", "ud", 1, "pool", "sg", "az", 1, null, 10, "jvmo", "fsRoot", "cid", JCloudsCloud.SlaveType.JNLP, 1
     );
 
     @Test // instanceCap is a subject of different overriding rules
     public void defaultOverrides() {
         SlaveOptions unmodified = CUSTOM.override(SlaveOptions.empty());
 
+        assertEquals(JCloudsCloud.BootSource.VOLUMESNAPSHOT, unmodified.getBootSource());
         assertEquals("img", unmodified.getImageId());
         assertEquals("hw", unmodified.getHardwareId());
         assertEquals("nw", unmodified.getNetworkId());
@@ -38,6 +39,7 @@ public class SlaveOptionsTest {
         assertEquals(1, (int) unmodified.getRetentionTime());
 
         SlaveOptions override = SlaveOptions.builder()
+                .bootSource(JCloudsCloud.BootSource.IMAGE)
                 .imageId("IMG")
                 .hardwareId("HW")
                 .networkId("NW")
@@ -58,6 +60,7 @@ public class SlaveOptionsTest {
         ;
         SlaveOptions overridden = CUSTOM.override(override);
 
+        assertEquals(JCloudsCloud.BootSource.IMAGE, overridden.getBootSource());
         assertEquals("IMG", overridden.getImageId());
         assertEquals("HW", overridden.getHardwareId());
         assertEquals("NW", overridden.getNetworkId());
@@ -89,10 +92,33 @@ public class SlaveOptionsTest {
     }
 
     @Test
+    public void eraseDefaultsOnlyErasesImageIdOrBootSourceIfBothMatchDefault() {
+        SlaveOptions defaults = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("img").hardwareId("hw").availabilityZone("defaults").build();
+        SlaveOptions bothSame = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("img").hardwareId("hw").availabilityZone("bothSame").build();
+        SlaveOptions differentImage = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("IMG").hardwareId("hw").availabilityZone("differentImage").build();
+        SlaveOptions differentBS = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId("img").hardwareId("hw").availabilityZone("differentBS").build();
+        SlaveOptions bothDifferent = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId("IMG").hardwareId("hw").availabilityZone("bothDifferent").build();
+
+        SlaveOptions actualBothSame = bothSame.eraseDefaults(defaults);
+        SlaveOptions actualDifferentImage = differentImage.eraseDefaults(defaults);
+        SlaveOptions actualDifferentBS = differentBS.eraseDefaults(defaults);
+        SlaveOptions actualBothDifferent = bothDifferent.eraseDefaults(defaults);
+
+        SlaveOptions expectedBothSame = SlaveOptions.builder().availabilityZone("bothSame").build();
+        SlaveOptions expectedDifferentImage = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("IMG").availabilityZone("differentImage").build();
+        SlaveOptions expectedDifferentBS = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId("img").availabilityZone("differentBS").build();
+        SlaveOptions expectedBothDifferent = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId("IMG").availabilityZone("bothDifferent").build();
+        assertEquals(actualBothSame, expectedBothSame);
+        assertEquals(actualDifferentImage, expectedDifferentImage);
+        assertEquals(actualDifferentBS, expectedDifferentBS);
+        assertEquals(actualBothDifferent, expectedBothDifferent);
+    }
+
+    @Test
     public void emptyStrings() {
         SlaveOptions nulls = SlaveOptions.empty();
         SlaveOptions emptyStrings = new SlaveOptions(
-                "", "", "", "", null, "", "", "", null, "", null, "", "", "", null, null
+                null, "", "", "", "", null, "", "", "", null, "", null, "", "", "", null, null
         );
         SlaveOptions emptyBuilt = SlaveOptions.builder()
                 .imageId("")

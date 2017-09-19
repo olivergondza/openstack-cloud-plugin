@@ -17,6 +17,12 @@
         <div name="slaveOptions" descriptorid="${descriptor.id}">
             <table style="width:100%">
                 <f:section title="Cloud Server Options">
+                    <f:entry title="Boot Source" field="bootSource">
+                        <f:select onchange="this.parentElement.parentElement.parentElement.querySelector('[invisibleCopyOf]').value = this.value" />
+                    </f:entry>
+                    <f:invisibleEntry title="invisible">
+                        <f:textbox value="${instance.bootSource}" field="copyOfBootSource" invisibleCopyOf="bootSource" />
+                    </f:invisibleEntry>
                     <f:entry title="Image" field="imageId">
                         <f:select/>
                     </f:entry>
@@ -39,7 +45,7 @@
                         <f:textbox/>
                     </f:entry>
                     <f:entry title="Availability Zone" field="availabilityZone">
-                        <f:textbox/>
+                        <f:combobox/>
                     </f:entry>
                     <f:entry title="Startup Timeout" field="startTimeout">
                         <f:textbox/>

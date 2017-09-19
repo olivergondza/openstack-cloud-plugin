@@ -227,10 +227,33 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
         // Ensure predictable server name so we can inject it into user data
         builder.name(serverName);
 
-        if (!Strings.isNullOrEmpty(opts.getImageId())) {
-            String imageId = cloud.getOpenstack().getImageIdFor(opts.getImageId());
-            LOGGER.fine("Setting image id to " + imageId);
-            builder.image(imageId);
+        final Openstack openstack = cloud.getOpenstack();
+        final JCloudsCloud.BootSource bootSource = opts.getBootSource() == null ? JCloudsCloud.BootSource.IMAGE : opts.getBootSource();
+        final String imageNameOrId = opts.getImageId();
+        final String effectiveImageId;
+        if (!Strings.isNullOrEmpty(imageNameOrId)) {
+            final List<String> ids = bootSource.findMatchingIds(openstack, imageNameOrId);
+            final int numberFound = ids.size();
+            switch (numberFound) {
+                case 0 :
+                    LOGGER.warning("No active " + bootSource + " '" + imageNameOrId + "' could be found.");
+                    effectiveImageId = null;
+                    break;
+                default :
+                    effectiveImageId = ids.get(numberFound - 1);
+                    LOGGER.warning("Multiple " + bootSource + "s (" + numberFound + ") found with name '" + imageNameOrId
+                            + "'.  Using most recent one, '" + effectiveImageId + "'.");
+                    break;
+                case 1 :
+                    effectiveImageId = ids.get(0);
+                    break;
+            }
+        } else {
+            effectiveImageId = null;
+        }
+        if (effectiveImageId != null) {
+            LOGGER.fine("Setting boot image to " + bootSource.toDisplayName() + " " + effectiveImageId);
+            bootSource.setServerBootSource(builder, effectiveImageId);
         }
 
         String hwid = opts.getHardwareId();
@@ -273,26 +296,29 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
             builder.userData(Base64.encode(content.getBytes(Charsets.UTF_8)));
         }
 
-        final Openstack openstack = cloud.getOpenstack();
         Server server = openstack.bootAndWaitActive(builder, opts.getStartTimeout());
         LOGGER.info("Provisioned: " + server.toString());
 
-        String poolName = opts.getFloatingIpPool();
-        if (poolName != null) {
-            LOGGER.fine("Assigning floating IP from " + poolName + " to " + serverName);
-            try {
+        try {
+            if (effectiveImageId != null) {
+                bootSource.afterProvisioning(server, openstack, effectiveImageId);
+            }
+            String poolName = opts.getFloatingIpPool();
+            if (poolName != null) {
+                LOGGER.fine("Assigning floating IP from " + poolName + " to " + serverName);
                 openstack.assignFloatingIp(server, poolName);
                 // Make sure address information is reflected in metadata
                 server = openstack.updateInfo(server);
                 LOGGER.info("Amended server: " + server.toString());
-            } catch (Throwable ex) {
-                // Do not leak the server as we are aborting the provisioning
-                AsyncResourceDisposer.get().dispose(new DestroyMachine(cloud.name, server.getId()));
-                throw ex;
             }
-        }
 
-        return server;
+            LOGGER.info("Provisioned: " + server.toString());
+            return server;
+        } catch (Throwable ex) {
+            // Do not leak the server as we are aborting the provisioning
+            AsyncResourceDisposer.get().dispose(new DestroyMachine(cloud.name, server.getId()));
+            throw ex;
+        }
     }
 
     private static String[] csvToArray(final String csv) {
