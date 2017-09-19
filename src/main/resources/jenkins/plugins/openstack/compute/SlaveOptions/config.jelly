@@ -17,15 +17,8 @@
         <div name="slaveOptions" descriptorid="${descriptor.id}">
             <table style="width:100%">
                 <f:section title="Cloud Server Options">
-                    <f:entry title="Boot Source" field="bootSource">
-                        <f:select onchange="this.parentElement.parentElement.parentElement.querySelector('[invisibleCopyOf]').value = this.value" />
-                    </f:entry>
-                    <f:invisibleEntry title="invisible">
-                        <f:textbox value="${instance.bootSource}" field="copyOfBootSource" invisibleCopyOf="bootSource" />
-                    </f:invisibleEntry>
-                    <f:entry title="Image" field="imageId">
-                        <f:select/>
-                    </f:entry>
+<!--default="${app.getDescriptor('jenkins.plugins.openstack.compute.slaveopts.BootSource.Unspecified')}"-->
+                    <f:dropdownDescriptorSelector field="bootSource" title="Boot Source"/>
                     <f:entry title="Hardware" field="hardwareId">
                         <f:select/>
                     </f:entry>

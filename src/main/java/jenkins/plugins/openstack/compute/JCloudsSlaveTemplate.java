@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 import com.google.common.base.Charsets;
 import hudson.remoting.Base64;
 import jenkins.plugins.openstack.compute.internal.DestroyMachine;
+import jenkins.plugins.openstack.compute.slaveopts.BootSource;
 import org.jenkinsci.lib.configprovider.ConfigProvider;
 import org.jenkinsci.lib.configprovider.model.Config;
 import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
@@ -113,7 +114,7 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 
         // Migrate from 2.0 to 2.1
         if (slaveOptions == null) {
-            slaveOptions = SlaveOptions.builder().imageId(imageId).hardwareId(hardwareId).numExecutors(Integer.getInteger(numExecutors)).jvmOptions(jvmOptions).userDataId(userDataId)
+            slaveOptions = SlaveOptions.builder().bootSource(new BootSource.Image(imageId)).hardwareId(hardwareId).numExecutors(Integer.getInteger(numExecutors)).jvmOptions(jvmOptions).userDataId(userDataId)
                     .fsRoot(fsRoot).retentionTime(overrideRetentionTime).keyPairName(keyPairName).networkId(networkId).securityGroups(securityGroups)
                     .credentialsId(credentialsId).slaveType(slaveType).availabilityZone(availabilityZone).build()
             ;
@@ -228,32 +229,32 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
         builder.name(serverName);
 
         final Openstack openstack = cloud.getOpenstack();
-        final JCloudsCloud.BootSource bootSource = opts.getBootSource() == null ? JCloudsCloud.BootSource.IMAGE : opts.getBootSource();
-        final String imageNameOrId = opts.getImageId();
-        final String effectiveImageId;
-        if (!Strings.isNullOrEmpty(imageNameOrId)) {
-            final List<String> ids = bootSource.findMatchingIds(openstack, imageNameOrId);
-            final int numberFound = ids.size();
-            switch (numberFound) {
-                case 0 :
-                    LOGGER.warning("No active " + bootSource + " '" + imageNameOrId + "' could be found.");
-                    effectiveImageId = null;
-                    break;
-                default :
-                    effectiveImageId = ids.get(numberFound - 1);
-                    LOGGER.warning("Multiple " + bootSource + "s (" + numberFound + ") found with name '" + imageNameOrId
-                            + "'.  Using most recent one, '" + effectiveImageId + "'.");
-                    break;
-                case 1 :
-                    effectiveImageId = ids.get(0);
-                    break;
-            }
-        } else {
-            effectiveImageId = null;
-        }
-        if (effectiveImageId != null) {
-            LOGGER.fine("Setting boot image to " + bootSource.toDisplayName() + " " + effectiveImageId);
-            bootSource.setServerBootSource(builder, effectiveImageId);
+        final BootSource bootSource = opts.getBootSource();
+        // Move the warning to BootSource
+//        final String effectiveImageId;
+//        if (!Strings.isNullOrEmpty(imageNameOrId)) {
+//            final List<String> ids = bootSource.findMatchingIds(openstack, imageNameOrId);
+//            final int numberFound = ids.size();
+//            switch (numberFound) {
+//                case 0 :
+//                    LOGGER.warning("No active " + bootSource + " '" + imageNameOrId + "' could be found.");
+//                    effectiveImageId = null;
+//                    break;
+//                default :
+//                    effectiveImageId = ids.get(numberFound - 1);
+//                    LOGGER.warning("Multiple " + bootSource + "s (" + numberFound + ") found with name '" + imageNameOrId
+//                            + "'.  Using most recent one, '" + effectiveImageId + "'.");
+//                    break;
+//                case 1 :
+//                    effectiveImageId = ids.get(0);
+//                    break;
+//            }
+//        } else {
+//            effectiveImageId = null;
+//        }
+        if (bootSource != null) {
+            LOGGER.fine("Setting boot options to " + bootSource);
+            bootSource.setServerBootSource(builder);
         }
 
         String hwid = opts.getHardwareId();
@@ -300,8 +301,8 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
         LOGGER.info("Provisioned: " + server.toString());
 
         try {
-            if (effectiveImageId != null) {
-                bootSource.afterProvisioning(server, openstack, effectiveImageId);
+            if (bootSource != null) {
+                bootSource.afterProvisioning(server, openstack);
             }
             String poolName = opts.getFloatingIpPool();
             if (poolName != null) {

@@ -2,6 +2,7 @@ package jenkins.plugins.openstack.compute;
 
 import static org.junit.Assert.*;
 
+import jenkins.plugins.openstack.compute.slaveopts.BootSource;
 import org.junit.Test;
 
 /**
@@ -13,15 +14,14 @@ public class SlaveOptionsTest {
      * Reusable options instance guaranteed not to collide with defaults
      */
     public static final SlaveOptions CUSTOM = new SlaveOptions(
-            JCloudsCloud.BootSource.VOLUMESNAPSHOT, "img", "hw", "nw", "ud", 1, "pool", "sg", "az", 1, null, 10, "jvmo", "fsRoot", "cid", JCloudsCloud.SlaveType.JNLP, 1
+            new BootSource.VolumeSnapshot("id"), "hw", "nw", "ud", 1, "pool", "sg", "az", 1, null, 10, "jvmo", "fsRoot", "cid", JCloudsCloud.SlaveType.JNLP, 1
     );
 
     @Test // instanceCap is a subject of different overriding rules
     public void defaultOverrides() {
         SlaveOptions unmodified = CUSTOM.override(SlaveOptions.empty());
 
-        assertEquals(JCloudsCloud.BootSource.VOLUMESNAPSHOT, unmodified.getBootSource());
-        assertEquals("img", unmodified.getImageId());
+        assertEquals(new BootSource.VolumeSnapshot("id"), unmodified.getBootSource());
         assertEquals("hw", unmodified.getHardwareId());
         assertEquals("nw", unmodified.getNetworkId());
         assertEquals("ud", unmodified.getUserDataId());
@@ -39,8 +39,7 @@ public class SlaveOptionsTest {
         assertEquals(1, (int) unmodified.getRetentionTime());
 
         SlaveOptions override = SlaveOptions.builder()
-                .bootSource(JCloudsCloud.BootSource.IMAGE)
-                .imageId("IMG")
+                .bootSource(new BootSource.Image("iid"))
                 .hardwareId("HW")
                 .networkId("NW")
                 .userDataId("UD")
@@ -60,8 +59,7 @@ public class SlaveOptionsTest {
         ;
         SlaveOptions overridden = CUSTOM.override(override);
 
-        assertEquals(JCloudsCloud.BootSource.IMAGE, overridden.getBootSource());
-        assertEquals("IMG", overridden.getImageId());
+        assertEquals(new BootSource.Image("iid"), overridden.getBootSource());
         assertEquals("HW", overridden.getHardwareId());
         assertEquals("NW", overridden.getNetworkId());
         assertEquals("UD", overridden.getUserDataId());
@@ -81,47 +79,23 @@ public class SlaveOptionsTest {
 
     @Test
     public void eraseDefaults() {
-        SlaveOptions defaults = SlaveOptions.builder().imageId("img").hardwareId("hw").networkId(null).floatingIpPool("a").build();
-        SlaveOptions configured = SlaveOptions.builder().imageId("IMG").hardwareId("hw").networkId("MW").floatingIpPool("A").build();
+        SlaveOptions defaults = SlaveOptions.builder().bootSource(new BootSource.Image("ID")).hardwareId("hw").networkId(null).floatingIpPool("a").build();
+        SlaveOptions configured = SlaveOptions.builder().bootSource(new BootSource.Image("ID")).hardwareId("hw").networkId("MW").floatingIpPool("A").build();
 
         SlaveOptions actual = configured.eraseDefaults(defaults);
 
-        SlaveOptions expected = SlaveOptions.builder().imageId("IMG").hardwareId(null).networkId("MW").floatingIpPool("A").build();
+        SlaveOptions expected = SlaveOptions.builder().bootSource(null).hardwareId(null).networkId("MW").floatingIpPool("A").build();
         assertEquals(expected, actual);
         assertEquals(configured, defaults.override(actual));
-    }
-
-    @Test
-    public void eraseDefaultsOnlyErasesImageIdOrBootSourceIfBothMatchDefault() {
-        SlaveOptions defaults = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("img").hardwareId("hw").availabilityZone("defaults").build();
-        SlaveOptions bothSame = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("img").hardwareId("hw").availabilityZone("bothSame").build();
-        SlaveOptions differentImage = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("IMG").hardwareId("hw").availabilityZone("differentImage").build();
-        SlaveOptions differentBS = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId("img").hardwareId("hw").availabilityZone("differentBS").build();
-        SlaveOptions bothDifferent = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId("IMG").hardwareId("hw").availabilityZone("bothDifferent").build();
-
-        SlaveOptions actualBothSame = bothSame.eraseDefaults(defaults);
-        SlaveOptions actualDifferentImage = differentImage.eraseDefaults(defaults);
-        SlaveOptions actualDifferentBS = differentBS.eraseDefaults(defaults);
-        SlaveOptions actualBothDifferent = bothDifferent.eraseDefaults(defaults);
-
-        SlaveOptions expectedBothSame = SlaveOptions.builder().availabilityZone("bothSame").build();
-        SlaveOptions expectedDifferentImage = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("IMG").availabilityZone("differentImage").build();
-        SlaveOptions expectedDifferentBS = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId("img").availabilityZone("differentBS").build();
-        SlaveOptions expectedBothDifferent = SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId("IMG").availabilityZone("bothDifferent").build();
-        assertEquals(actualBothSame, expectedBothSame);
-        assertEquals(actualDifferentImage, expectedDifferentImage);
-        assertEquals(actualDifferentBS, expectedDifferentBS);
-        assertEquals(actualBothDifferent, expectedBothDifferent);
     }
 
     @Test
     public void emptyStrings() {
         SlaveOptions nulls = SlaveOptions.empty();
         SlaveOptions emptyStrings = new SlaveOptions(
-                null, "", "", "", "", null, "", "", "", null, "", null, "", "", "", null, null
+                null, "", "", "", null, "", "", "", null, "", null, "", "", "", null, null
         );
         SlaveOptions emptyBuilt = SlaveOptions.builder()
-                .imageId("")
                 .hardwareId("")
                 .networkId("")
                 .userDataId("")
@@ -137,7 +111,6 @@ public class SlaveOptionsTest {
         assertEquals(nulls, emptyStrings);
         assertEquals(nulls, emptyBuilt);
 
-        assertEquals(null, emptyStrings.getImageId());
         assertEquals(null, emptyStrings.getHardwareId());
         assertEquals(null, emptyStrings.getNetworkId());
         assertEquals(null, emptyStrings.getUserDataId());

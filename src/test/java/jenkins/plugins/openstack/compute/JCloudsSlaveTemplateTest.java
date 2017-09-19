@@ -11,6 +11,7 @@ import hudson.remoting.Base64;
 import jenkins.plugins.openstack.PluginTestRule;
 
 import jenkins.plugins.openstack.compute.internal.Openstack;
+import jenkins.plugins.openstack.compute.slaveopts.BootSource;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -68,7 +69,7 @@ public class JCloudsSlaveTemplateTest {
     @Test
     public void eraseDefaults() throws Exception {
         SlaveOptions cloudOpts = SlaveOptionsTest.CUSTOM; // Make sure nothing collides with defaults
-        SlaveOptions templateOpts = cloudOpts.getBuilder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("42").availabilityZone("other").build();
+        SlaveOptions templateOpts = cloudOpts.getBuilder().bootSource(new BootSource.Image("id")).availabilityZone("other").build();
         assertEquals(cloudOpts.getHardwareId(), templateOpts.getHardwareId());
 
         JCloudsSlaveTemplate template = new JCloudsSlaveTemplate(
@@ -82,7 +83,7 @@ public class JCloudsSlaveTemplateTest {
         );
 
         assertEquals(cloudOpts, cloud.getRawSlaveOptions());
-        assertEquals(SlaveOptions.builder().bootSource(JCloudsCloud.BootSource.IMAGE).imageId("42").availabilityZone("other").build(), template.getRawSlaveOptions());
+        assertEquals(SlaveOptions.builder().bootSource(new BootSource.Image("id")).availabilityZone("other").build(), template.getRawSlaveOptions());
     }
 
     @Test
@@ -123,7 +124,7 @@ public class JCloudsSlaveTemplateTest {
     public void bootFromVolumeSnapshot() throws Exception {
         final String volumeSnapshotName = "MyVolumeSnapshot";
         final String volumeSnapshotId = "vs-123-id";
-        final SlaveOptions opts = j.dummySlaveOptions().getBuilder().bootSource(JCloudsCloud.BootSource.VOLUMESNAPSHOT).imageId(volumeSnapshotName).build();
+        final SlaveOptions opts = j.dummySlaveOptions().getBuilder().bootSource(new BootSource.VolumeSnapshot(volumeSnapshotId)).build();
         final JCloudsSlaveTemplate instance = j.dummySlaveTemplate(opts, "a");
         final JCloudsCloud cloud = j.configureSlaveProvisioning(j.dummyCloud(instance));
         final Openstack mockOs = cloud.getOpenstack();

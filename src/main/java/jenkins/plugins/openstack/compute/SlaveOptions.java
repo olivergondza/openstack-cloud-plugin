@@ -26,6 +26,7 @@ package jenkins.plugins.openstack.compute;
 import hudson.Util;
 import hudson.model.Describable;
 import jenkins.model.Jenkins;
+import jenkins.plugins.openstack.compute.slaveopts.BootSource;
 import org.apache.commons.lang.builder.ToStringBuilder;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -45,11 +46,10 @@ import java.io.Serializable;
  */
 public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     private static final long serialVersionUID = -1L;
-    private static final SlaveOptions EMPTY = new SlaveOptions(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    private static final SlaveOptions EMPTY = new SlaveOptions(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
 
     // Provisioning attributes
-    private final @CheckForNull JCloudsCloud.BootSource bootSource;
-    private final @CheckForNull String imageId;
+    private /*final*/ @CheckForNull BootSource bootSource;
     private final @CheckForNull String hardwareId;
     private final @CheckForNull String networkId;
     private final @CheckForNull String userDataId;
@@ -70,16 +70,15 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     // Slave attributes
     private final Integer retentionTime;
 
+    // Replaced by BootSource
+    @Deprecated private transient @CheckForNull String imageId;
+
     public @CheckForNull String getFsRoot() {
         return fsRoot;
     }
 
-    public @CheckForNull JCloudsCloud.BootSource getBootSource() {
+    public @CheckForNull BootSource getBootSource() {
         return bootSource;
-    }
-
-    public @CheckForNull String getImageId() {
-        return imageId;
     }
 
     public @CheckForNull String getHardwareId() {
@@ -141,7 +140,6 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     public SlaveOptions(Builder b) {
         this(
                 b.bootSource,
-                b.imageId,
                 b.hardwareId,
                 b.networkId,
                 b.userDataId,
@@ -162,8 +160,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
 
     @DataBoundConstructor @Restricted(NoExternalUse.class)
     public SlaveOptions(
-            JCloudsCloud.BootSource bootSource,
-            String imageId,
+            BootSource bootSource,
             String hardwareId,
             String networkId,
             String userDataId,
@@ -181,7 +178,6 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
             Integer retentionTime
     ) {
         this.bootSource = bootSource;
-        this.imageId = Util.fixEmpty(imageId);
         this.hardwareId = Util.fixEmpty(hardwareId);
         this.networkId = Util.fixEmpty(networkId);
         this.userDataId = Util.fixEmpty(userDataId);
@@ -199,13 +195,20 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
         this.retentionTime = retentionTime;
     }
 
+    private Object readResolve() {
+        if (bootSource == null && imageId != null) {
+            bootSource = new BootSource.Image(imageId);
+        }
+        imageId = null;
+        return this;
+    }
+
     /**
      * Derive SlaveOptions taking this instance as baseline and overriding with argument.
      */
     public @Nonnull SlaveOptions override(@Nonnull SlaveOptions o) {
         return new Builder()
                 .bootSource(_override(this.bootSource, o.bootSource))
-                .imageId(_override(this.imageId, o.imageId))
                 .hardwareId(_override(this.hardwareId, o.hardwareId))
                 .networkId(_override(this.networkId, o.networkId))
                 .userDataId(_override(this.userDataId, o.userDataId))
@@ -233,13 +236,8 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
      * Derive new options from current leaving <tt>null</tt> where same as default.
      */
     public @Nonnull SlaveOptions eraseDefaults(@Nonnull SlaveOptions defaults) {
-        final Builder builder = new Builder();
-        // we only erase imageId or bootSource if we can erase both of them
-        if (_erase(this.bootSource, defaults.bootSource) != null || _erase(this.imageId, defaults.imageId) != null) {
-            builder.bootSource(this.bootSource);
-            builder.imageId(this.imageId);
-        }
-        return builder
+        return new Builder()
+                .bootSource(_erase(this.bootSource, defaults.bootSource))
                 .hardwareId(_erase(this.hardwareId, defaults.hardwareId))
                 .networkId(_erase(this.networkId, defaults.networkId))
                 .userDataId(_erase(this.userDataId, defaults.userDataId))
@@ -270,7 +268,6 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     public String toString() {
         return new ToStringBuilder(this)
                 .append("bootSource", bootSource)
-                .append("imageId", imageId)
                 .append("hardwareId", hardwareId)
                 .append("networkId", networkId)
                 .append("userDataId", userDataId)
@@ -298,7 +295,6 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
         SlaveOptions that = (SlaveOptions) o;
 
         if (bootSource != null ? !bootSource.equals(that.bootSource) : that.bootSource != null) return false;
-        if (imageId != null ? !imageId.equals(that.imageId) : that.imageId != null) return false;
         if (hardwareId != null ? !hardwareId.equals(that.hardwareId) : that.hardwareId != null) return false;
         if (networkId != null ? !networkId.equals(that.networkId) : that.networkId != null) return false;
         if (userDataId != null ? !userDataId.equals(that.userDataId) : that.userDataId != null) return false;
@@ -320,7 +316,6 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     @Override
     public int hashCode() {
         int result = bootSource != null ? bootSource.hashCode() : 0;
-        result = 31 * result + (imageId != null ? imageId.hashCode() : 0);
         result = 31 * result + (hardwareId != null ? hardwareId.hashCode() : 0);
         result = 31 * result + (networkId != null ? networkId.hashCode() : 0);
         result = 31 * result + (userDataId != null ? userDataId.hashCode() : 0);
@@ -345,7 +340,6 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     public Builder getBuilder() {
         return new Builder()
                 .bootSource(bootSource)
-                .imageId(imageId)
                 .hardwareId(hardwareId)
                 .networkId(networkId)
                 .userDataId(userDataId)
@@ -376,8 +370,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     }
 
     public static final class Builder {
-        private @CheckForNull JCloudsCloud.BootSource bootSource;
-        private @CheckForNull String imageId;
+        private @CheckForNull BootSource bootSource;
         private @CheckForNull String hardwareId;
         private @CheckForNull String networkId;
         private @CheckForNull String userDataId;
@@ -402,13 +395,8 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
             return new SlaveOptions(this);
         }
 
-        public @Nonnull Builder bootSource(JCloudsCloud.BootSource bootSource) {
+        public @Nonnull Builder bootSource(BootSource bootSource) {
             this.bootSource = bootSource;
-            return this;
-        }
-
-        public @Nonnull Builder imageId(String imageId) {
-            this.imageId = imageId;
             return this;
         }
 

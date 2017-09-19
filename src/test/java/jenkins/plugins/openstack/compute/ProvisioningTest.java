@@ -15,6 +15,7 @@ import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.NodeProvisioner;
 import jenkins.plugins.openstack.PluginTestRule;
 import jenkins.plugins.openstack.compute.internal.Openstack;
+import jenkins.plugins.openstack.compute.slaveopts.BootSource;
 import org.hamcrest.Matchers;
 import org.jenkinsci.plugins.cloudstats.CloudStatistics;
 import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
@@ -272,7 +273,7 @@ public class ProvisioningTest {
 
     @Test
     public void allowToUseImageNameAsWellAsId() throws Exception {
-        SlaveOptions opts = j.dummySlaveOptions().getBuilder().imageId("image-id").build();
+        SlaveOptions opts = j.dummySlaveOptions().getBuilder().bootSource(new BootSource.Image("image-id")).build();
         JCloudsCloud cloud = j.configureSlaveLaunching(j.dummyCloud(j.dummySlaveTemplate(opts, "label")));
 
         Openstack os = cloud.getOpenstack();
