@@ -230,32 +230,9 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 
         final Openstack openstack = cloud.getOpenstack();
         final BootSource bootSource = opts.getBootSource();
-        // Move the warning to BootSource
-//        final String effectiveImageId;
-//        if (!Strings.isNullOrEmpty(imageNameOrId)) {
-//            final List<String> ids = bootSource.findMatchingIds(openstack, imageNameOrId);
-//            final int numberFound = ids.size();
-//            switch (numberFound) {
-//                case 0 :
-//                    LOGGER.warning("No active " + bootSource + " '" + imageNameOrId + "' could be found.");
-//                    effectiveImageId = null;
-//                    break;
-//                default :
-//                    effectiveImageId = ids.get(numberFound - 1);
-//                    LOGGER.warning("Multiple " + bootSource + "s (" + numberFound + ") found with name '" + imageNameOrId
-//                            + "'.  Using most recent one, '" + effectiveImageId + "'.");
-//                    break;
-//                case 1 :
-//                    effectiveImageId = ids.get(0);
-//                    break;
-//            }
-//        } else {
-//            effectiveImageId = null;
-//        }
-        if (bootSource != null) {
-            LOGGER.fine("Setting boot options to " + bootSource);
-            bootSource.setServerBootSource(builder);
-        }
+        if (bootSource == null) throw new JCloudsCloud.ProvisioningFailedException("No boot source specified");
+        LOGGER.fine("Setting boot options to " + bootSource);
+        bootSource.setServerBootSource(builder, openstack);
 
         String hwid = opts.getHardwareId();
         if (!Strings.isNullOrEmpty(hwid)) {

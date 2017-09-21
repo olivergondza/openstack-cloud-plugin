@@ -29,6 +29,7 @@ import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+import jenkins.plugins.openstack.compute.JCloudsCloud;
 import jenkins.plugins.openstack.compute.OsAuthDescriptor;
 import jenkins.plugins.openstack.compute.internal.Openstack;
 import net.sf.json.JSONObject;
@@ -90,16 +91,19 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
      *
      * @param builder The server specification that is under construction. This
      *                will be amended.
+     * @param os Openstack.
+     * @throws JCloudsCloud.ProvisioningFailedException Unable to configure the request. Do not provision.
      */
-    public void setServerBootSource(ServerCreateBuilder builder) {}
+    public void setServerBootSource(ServerCreateBuilder builder, Openstack os) throws JCloudsCloud.ProvisioningFailedException {}
 
     /**
      * Called after a server has been provisioned.
      *
      * @param server    The newly-provisioned server.
      * @param openstack Means of communicating with the OpenStack service.
+     * @throws JCloudsCloud.ProvisioningFailedException Unable to amend the server so it has to be rolled-back.
      */
-    public void afterProvisioning(Server server, Openstack openstack) {}
+    public void afterProvisioning(Server server, Openstack openstack) throws JCloudsCloud.ProvisioningFailedException {}
 
     public abstract static class BootSourceDescriptor extends OsAuthDescriptor<BootSource> {
         @Override
@@ -137,8 +141,21 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
         }
 
         @Override
-        public void setServerBootSource(ServerCreateBuilder builder) {
-            builder.image(name);
+        public void setServerBootSource(ServerCreateBuilder builder, Openstack os) throws JCloudsCloud.ProvisioningFailedException {
+            List<String> matchingIds = findMatchingIds(os, name);
+            int size = matchingIds.size();
+            if (size == 0) throw new JCloudsCloud.ProvisioningFailedException(
+                    "No image matching " + name + " found"
+            );
+
+            final String id;
+            if (size == 1) {
+                id = matchingIds.get(0);
+            } else {
+                id = matchingIds.get(size - 1);
+                LOGGER.warning(id + " images matches " + name + ". Using the most recent one: " + id);
+            }
+            builder.image(id);
         }
 
         @Override
@@ -227,11 +244,26 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
         }
 
         @Override
-        public void setServerBootSource(ServerCreateBuilder builder) {
+        public void setServerBootSource(ServerCreateBuilder builder, Openstack os) {
+            List<String> matchingIds = findMatchingIds(os, name);
+            int size = matchingIds.size();
+            if (size == 0) throw new JCloudsCloud.ProvisioningFailedException(
+                    "No volume snapshot matching " + name + " found"
+            );
+
+            final String id;
+            if (size == 1) {
+                id = matchingIds.get(0);
+            } else {
+                id = matchingIds.get(size - 1);
+                LOGGER.warning(id + " volume snapshots matches " + name + ". Using the most recent one: " + id);
+            }
+            builder.image(id);
+
             BlockDeviceMappingBuilder volumeBuilder = Builders.blockDeviceMapping()
                     .sourceType(BDMSourceType.SNAPSHOT)
                     .destinationType(BDMDestType.VOLUME)
-                    .uuid(name)
+                    .uuid(id)
                     .deleteOnTermination(true)
                     .bootIndex(0);
             builder.blockDevice(volumeBuilder.build());

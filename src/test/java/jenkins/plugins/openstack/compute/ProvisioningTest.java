@@ -25,9 +25,17 @@ import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.mockito.ArgumentCaptor;
+import org.mockito.internal.util.reflection.Whitebox;
+import org.openstack4j.model.compute.BDMDestType;
+import org.openstack4j.model.compute.BDMSourceType;
+import org.openstack4j.model.compute.BlockDeviceMappingCreate;
 import org.openstack4j.model.compute.Server;
+import org.openstack4j.model.compute.ServerCreate;
 import org.openstack4j.model.compute.builder.ServerCreateBuilder;
+import org.openstack4j.openstack.compute.domain.NovaBlockDeviceMappingCreate;
+import org.openstack4j.openstack.compute.domain.NovaServerCreate;
 
+import java.lang.reflect.Field;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
@@ -289,6 +297,40 @@ public class ProvisioningTest {
         assertEquals(2, builders.size());
         assertEquals("image-id", builders.get(0).build().getImageRef());
         assertEquals("something-else", builders.get(1).build().getImageRef());
+    }
+
+    @Test
+    public void allowToUseVolumeSnapshotNameAsWellAsId() throws Exception {
+        SlaveOptions opts = j.dummySlaveOptions().getBuilder().bootSource(new BootSource.VolumeSnapshot("vs-id")).build();
+        JCloudsCloud cloud = j.configureSlaveLaunching(j.dummyCloud(j.dummySlaveTemplate(opts, "label")));
+
+        Openstack os = cloud.getOpenstack();
+        // simulate same snapshot resolved to different ids
+        when(os.getVolumeSnapshotIdsFor(eq("vs-id"))).thenReturn(Collections.singletonList("vs-id")).thenReturn(Collections.singletonList("something-else"));
+
+        j.provision(cloud, "label"); j.provision(cloud, "label");
+
+        ArgumentCaptor<ServerCreateBuilder> captor = ArgumentCaptor.forClass(ServerCreateBuilder.class);
+        verify(os, times(2)).bootAndWaitActive(captor.capture(), any(Integer.class));
+
+        List<ServerCreateBuilder> builders = captor.getAllValues();
+        assertEquals(2, builders.size());
+        assertEquals("vs-id", getVolumeSnapshotId(builders.get(0)));
+        assertEquals("something-else", getVolumeSnapshotId(builders.get(1)));
+    }
+
+    @SuppressWarnings("unchecked")
+    private String getVolumeSnapshotId(ServerCreateBuilder builder) {
+        List<BlockDeviceMappingCreate> mapping = (List<BlockDeviceMappingCreate>) Whitebox.getInternalState(
+                builder.build(),
+                "blockDeviceMapping"
+        );
+
+        assertEquals(1, mapping.size());
+        NovaBlockDeviceMappingCreate device = (NovaBlockDeviceMappingCreate) mapping.get(0);
+        assertEquals(BDMSourceType.SNAPSHOT, device.source_type);
+        assertEquals(BDMDestType.VOLUME, device.destination_type);
+        return device.uuid;
     }
 
     @Test
