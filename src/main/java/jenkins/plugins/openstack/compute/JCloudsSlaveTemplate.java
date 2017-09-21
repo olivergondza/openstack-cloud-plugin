@@ -230,9 +230,13 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 
         final Openstack openstack = cloud.getOpenstack();
         final BootSource bootSource = opts.getBootSource();
-        if (bootSource == null) throw new JCloudsCloud.ProvisioningFailedException("No boot source specified");
-        LOGGER.fine("Setting boot options to " + bootSource);
-        bootSource.setServerBootSource(builder, openstack);
+        if (bootSource == null) {
+            // TODO
+            // throw new JCloudsCloud.ProvisioningFailedException("No boot source specified");
+        } else {
+            LOGGER.fine("Setting boot options to " + bootSource);
+            bootSource.setServerBootSource(builder, openstack);
+        }
 
         String hwid = opts.getHardwareId();
         if (!Strings.isNullOrEmpty(hwid)) {

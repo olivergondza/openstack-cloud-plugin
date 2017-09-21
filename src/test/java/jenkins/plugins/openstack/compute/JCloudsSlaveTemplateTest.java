@@ -124,7 +124,7 @@ public class JCloudsSlaveTemplateTest {
     public void bootFromVolumeSnapshot() throws Exception {
         final String volumeSnapshotName = "MyVolumeSnapshot";
         final String volumeSnapshotId = "vs-123-id";
-        final SlaveOptions opts = j.dummySlaveOptions().getBuilder().bootSource(new BootSource.VolumeSnapshot(volumeSnapshotId)).build();
+        final SlaveOptions opts = j.dummySlaveOptions().getBuilder().bootSource(new BootSource.VolumeSnapshot(volumeSnapshotName)).build();
         final JCloudsSlaveTemplate instance = j.dummySlaveTemplate(opts, "a");
         final JCloudsCloud cloud = j.configureSlaveProvisioning(j.dummyCloud(instance));
         final Openstack mockOs = cloud.getOpenstack();
@@ -153,7 +153,7 @@ public class JCloudsSlaveTemplateTest {
         final String actualVolumeDescription = vdCaptor.getValue();
         assertThat(actualVolumeDescription, containsString(actualServerName));
         assertThat(actualVolumeDescription, containsString(actualServerId));
-        assertThat(actualVolumeDescription, containsString(volumeSnapshotId));
+        assertThat(actualVolumeDescription, containsString(volumeSnapshotName));
     }
 
     private static Object readPrivateField(Object object, String fieldName) {

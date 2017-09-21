@@ -144,9 +144,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
         public void setServerBootSource(ServerCreateBuilder builder, Openstack os) throws JCloudsCloud.ProvisioningFailedException {
             List<String> matchingIds = findMatchingIds(os, name);
             int size = matchingIds.size();
-            if (size == 0) throw new JCloudsCloud.ProvisioningFailedException(
-                    "No image matching " + name + " found"
-            );
+            // TODO
+            if (size == 0) return; //throw new JCloudsCloud.ProvisioningFailedException("No image matching " + name + " found");
 
             final String id;
             if (size == 1) {
@@ -247,9 +246,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
         public void setServerBootSource(ServerCreateBuilder builder, Openstack os) {
             List<String> matchingIds = findMatchingIds(os, name);
             int size = matchingIds.size();
-            if (size == 0) throw new JCloudsCloud.ProvisioningFailedException(
-                    "No volume snapshot matching " + name + " found"
-            );
+            // TODO
+            if (size == 0) return; // throw new JCloudsCloud.ProvisioningFailedException("No volume snapshot matching " + name + " found");
 
             final String id;
             if (size == 1) {
