@@ -24,7 +24,6 @@
 package jenkins.plugins.openstack.compute.slaveopts;
 
 import hudson.Extension;
-import hudson.RelativePath;
 import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
@@ -112,16 +111,16 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
     public static final class Image extends BootSource {
         private static final long serialVersionUID = -8309975034351235331L;
 
-        private final @Nonnull String imageId;
+        private final @Nonnull String name;
 
         @DataBoundConstructor
-        public Image(@Nonnull String imageId) {
-            this.imageId = imageId;
+        public Image(@Nonnull String name) {
+            this.name = name;
         }
 
         @Nonnull
-        public String getImageId() {
-            return imageId;
+        public String getName() {
+            return name;
         }
 
         @Override
@@ -139,12 +138,12 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
         @Override
         public void setServerBootSource(ServerCreateBuilder builder) {
-            builder.image(imageId);
+            builder.image(name);
         }
 
         @Override
         public String toString() {
-            return "Image " + imageId;
+            return "Image " + name;
         }
 
         @Override
@@ -154,12 +153,12 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
             Image image = (Image) o;
 
-            return imageId.equals(image.imageId);
+            return this.name.equals(image.name);
         }
 
         @Override
         public int hashCode() {
-            return imageId.hashCode();
+            return name.hashCode();
         }
 
         @Extension
@@ -171,8 +170,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
             @Restricted(DoNotUse.class)
             @InjectOsAuth
-            public ListBoxModel doFillImageIdItems(
-                    @QueryParameter String imageId,
+            public ListBoxModel doFillNameItems(
+                    @QueryParameter String name,
                     @QueryParameter String endPointUrl, @QueryParameter String identity, @QueryParameter String credential, @QueryParameter String zone
             ) {
 
@@ -181,8 +180,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
                 try {
                     final Openstack openstack = Openstack.Factory.get(endPointUrl, identity, credential, zone);
-                    for (String name: openstack.getImages().keySet()) {
-                        m.add(name);
+                    for (String candidateName: openstack.getImages().keySet()) {
+                        m.add(candidateName);
                     }
                     return m;
                 } catch (AuthenticationException | FormValidation | ConnectionException ex) {
@@ -191,8 +190,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
                     LOGGER.log(Level.SEVERE, ex.getMessage(), ex);
                 }
 
-                if (Util.fixEmpty(imageId) != null) {
-                    m.add(imageId);
+                if (Util.fixEmpty(name) != null) {
+                    m.add(name);
                 }
 
                 return m;
@@ -202,16 +201,16 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
     public static final class VolumeSnapshot extends BootSource {
         private static final long serialVersionUID = 1629434277902240395L;
-        private final @Nonnull String snapshotId;
+        private final @Nonnull String name;
 
         @DataBoundConstructor
-        public VolumeSnapshot(@Nonnull String snapshotId) {
-            this.snapshotId = snapshotId;
+        public VolumeSnapshot(@Nonnull String name) {
+            this.name = name;
         }
 
         @Nonnull
-        public String getSnapshotId() {
-            return snapshotId;
+        public String getName() {
+            return name;
         }
 
         @Override
@@ -232,7 +231,7 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
             BlockDeviceMappingBuilder volumeBuilder = Builders.blockDeviceMapping()
                     .sourceType(BDMSourceType.SNAPSHOT)
                     .destinationType(BDMDestType.VOLUME)
-                    .uuid(snapshotId)
+                    .uuid(name)
                     .deleteOnTermination(true)
                     .bootIndex(0);
             builder.blockDevice(volumeBuilder.build());
@@ -250,7 +249,7 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
             final String instanceName = server.getName();
             int i = 0;
             final String newVolumeDescription = "For " + instanceName + " (" + instanceId
-                    + "), from VolumeSnapshot " + snapshotId + ".";
+                    + "), from VolumeSnapshot " + name + ".";
             for (final String volumeId : volumeIds) {
                 final String newVolumeName = instanceName + '[' + (i++) + ']';
                 openstack.setVolumeNameAndDescription(volumeId, newVolumeName, newVolumeDescription);
@@ -259,7 +258,7 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
         @Override
         public String toString() {
-            return "VolumeSnapshot " + snapshotId;
+            return "VolumeSnapshot " + name;
         }
 
         @Override
@@ -269,12 +268,12 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
             VolumeSnapshot that = (VolumeSnapshot) o;
 
-            return snapshotId.equals(that.snapshotId);
+            return name.equals(that.name);
         }
 
         @Override
         public int hashCode() {
-            return snapshotId.hashCode();
+            return name.hashCode();
         }
 
         @Extension
@@ -286,8 +285,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
             @Restricted(DoNotUse.class)
             @OsAuthDescriptor.InjectOsAuth
-            public ListBoxModel doFillSnapshotIdItems(
-                    @QueryParameter String snapshot,
+            public ListBoxModel doFillNameItems(
+                    @QueryParameter String name,
                     @QueryParameter String endPointUrl, @QueryParameter String identity, @QueryParameter String credential, @QueryParameter String zone
             ) {
 
@@ -296,8 +295,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
                 try {
                     final Openstack openstack = Openstack.Factory.get(endPointUrl, identity, credential, zone);
-                    for (String name: openstack.getVolumeSnapshots().keySet()) {
-                        m.add(name);
+                    for (String candidateName: openstack.getVolumeSnapshots().keySet()) {
+                        m.add(candidateName);
                     }
                     return m;
                 } catch (AuthenticationException | FormValidation | ConnectionException ex) {
@@ -306,8 +305,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
                     LOGGER.log(Level.SEVERE, ex.getMessage(), ex);
                 }
 
-                if (Util.fixEmpty(snapshot) != null) {
-                    m.add(snapshot);
+                if (Util.fixEmpty(name) != null) {
+                    m.add(name);
                 }
 
                 return m;

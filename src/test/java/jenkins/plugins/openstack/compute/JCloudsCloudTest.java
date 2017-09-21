@@ -240,7 +240,7 @@ public class JCloudsCloudTest {
         assertEquals(Label.parse("label"), template.getLabelSet());
         SlaveOptions to = template.getEffectiveSlaveOptions();
         assertEquals("16", to.getHardwareId());
-        assertEquals("ac98e93d-34a3-437d-a7ba-9ad24c02f5b2", ((BootSource.Image) to.getBootSource()).getImageId());
+        assertEquals("ac98e93d-34a3-437d-a7ba-9ad24c02f5b2", ((BootSource.Image) to.getBootSource()).getName());
         assertEquals("my-network", to.getNetworkId());
         assertEquals(1, (int) to.getNumExecutors());
         assertEquals(0, (int) to.getRetentionTime()); // overrideRetentionTime though deprecated, should be honored

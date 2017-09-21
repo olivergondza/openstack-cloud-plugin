@@ -430,20 +430,14 @@ public class SlaveOptionsDescriptorTest {
                 "../credential", "../../credential",
                 "../zone", "../../zone"
         );
-        List<String> expectedImageId = new ArrayList<String>();
-        expectedImageId.add("bootSource");
-        expectedImageId.add("../../slaveOptions/copyOfBootSource");
-        expectedImageId.addAll(expected);
 
         assertThat(getFillDependencies("keyPairName"), equalTo(expected));
         assertThat(getFillDependencies("floatingIpPool"), equalTo(expected));
         assertThat(getFillDependencies("hardwareId"), equalTo(expected));
-        assertThat(getFillDependencies("imageId"), equalTo(expectedImageId));
         assertThat(getFillDependencies("networkId"), equalTo(expected));
 
         assertFillWorks("floatingIpPool");
         assertFillWorks("hardwareId");
-        assertFillWorks("imageId");
         assertFillWorks("networkId");
         assertFillWorks("keyPairName");
     }

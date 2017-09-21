@@ -322,9 +322,8 @@ public class Openstack {
      * If we have found multiple {@link Image}s then they will be listed in
      * ascending date order (oldest first).
      * 
-     * @param nameOrId
-     *            The name or ID of zero or more images.
-     * @return A non-null list. It may contain zero, one or multiple IDs.
+     * @param nameOrId The name or ID of zero or more images.
+     * @return It may contain zero, one or multiple IDs.
      */
     public @Nonnull List<String> getImageIdsFor(String nameOrId) {
         final Collection<Image> sortedObjects = new TreeSet<>(IMAGE_DATE_COMPARATOR);
