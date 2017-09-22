@@ -24,6 +24,7 @@
 package jenkins.plugins.openstack.compute.slaveopts;
 
 import hudson.Extension;
+import hudson.RelativePath;
 import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
@@ -57,33 +58,16 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static jenkins.plugins.openstack.compute.SlaveOptionsDescriptor.REQUIRED;
+import static jenkins.plugins.openstack.compute.SlaveOptionsDescriptor.getDefault;
+
 /**
  * The source machine is booted from.
  */
-// TODO: the values configured are not really IDs - rename
 @Restricted(NoExternalUse.class)
 public abstract class BootSource extends AbstractDescribableImpl<BootSource> implements Serializable {
     private static final long serialVersionUID = -838838433829383008L;
     private static final Logger LOGGER = Logger.getLogger(BootSource.class.getName());
-
-    /**
-     * Lists all the names (of this kind of {@link BootSource}) that the
-     * user could choose between.
-     *
-     * @param openstack Means of communicating with the OpenStack service.
-     */
-    public abstract List<String> listAllNames(Openstack openstack);
-
-    /**
-     * Lists all the IDs (of this kind of {@link BootSource}) matching the
-     * given nameOrId.
-     *
-     * @param openstack Means of communicating with the OpenStack service.
-     * @param nameOrId  The user's selected name (or ID). This is most likely a
-     *                  value previously returned by
-     *                  {@link #listAllNames(Openstack)}.
-     */
-    public abstract List<String> findMatchingIds(Openstack openstack, String nameOrId);
 
     /**
      * Configures the given {@link ServerCreateBuilder} to specify that the
@@ -94,7 +78,7 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
      * @param os Openstack.
      * @throws JCloudsCloud.ProvisioningFailedException Unable to configure the request. Do not provision.
      */
-    public void setServerBootSource(ServerCreateBuilder builder, Openstack os) throws JCloudsCloud.ProvisioningFailedException {}
+    public void setServerBootSource(@Nonnull ServerCreateBuilder builder, @Nonnull Openstack os) throws JCloudsCloud.ProvisioningFailedException {}
 
     /**
      * Called after a server has been provisioned.
@@ -103,13 +87,26 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
      * @param openstack Means of communicating with the OpenStack service.
      * @throws JCloudsCloud.ProvisioningFailedException Unable to amend the server so it has to be rolled-back.
      */
-    public void afterProvisioning(Server server, Openstack openstack) throws JCloudsCloud.ProvisioningFailedException {}
+    public void afterProvisioning(@Nonnull Server server, @Nonnull Openstack openstack) throws JCloudsCloud.ProvisioningFailedException {}
+
+    @Override public BootSourceDescriptor getDescriptor() {
+        return (BootSourceDescriptor) super.getDescriptor();
+    }
 
     public abstract static class BootSourceDescriptor extends OsAuthDescriptor<BootSource> {
         @Override
         public List<String> getAuthFieldsOffsets() {
             return Arrays.asList("../..", "../../..");
         }
+
+        /**
+         * Lists all the IDs (of this kind of {@link BootSource}) matching the
+         * given nameOrId.
+         *
+         * @param openstack Means of communicating with the OpenStack service.
+         * @param nameOrId  The user's selected name (or ID).
+         */
+        public abstract @Nonnull List<String> findMatchingIds(Openstack openstack, String nameOrId);
     }
 
     public static final class Image extends BootSource {
@@ -128,21 +125,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
         }
 
         @Override
-        public List<String> listAllNames(Openstack openstack) {
-            final Map<String, ?> images = openstack.getImages();
-            final List<String> allNames = new ArrayList<String>(images.size());
-            allNames.addAll(images.keySet());
-            return allNames;
-        }
-
-        @Override
-        public List<String> findMatchingIds(Openstack openstack, String nameOrId) {
-            return openstack.getImageIdsFor(nameOrId);
-        }
-
-        @Override
-        public void setServerBootSource(ServerCreateBuilder builder, Openstack os) throws JCloudsCloud.ProvisioningFailedException {
-            List<String> matchingIds = findMatchingIds(os, name);
+        public void setServerBootSource(@Nonnull ServerCreateBuilder builder, @Nonnull Openstack os) throws JCloudsCloud.ProvisioningFailedException {
+            List<String> matchingIds = getDescriptor().findMatchingIds(os, name);
             int size = matchingIds.size();
             // TODO
             if (size == 0) return; //throw new JCloudsCloud.ProvisioningFailedException("No image matching " + name + " found");
@@ -184,6 +168,11 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
                 return "Image";
             }
 
+            @Nonnull @Override
+            public List<String> findMatchingIds(Openstack openstack, String nameOrId) {
+                return openstack.getImageIdsFor(nameOrId);
+            }
+
             @Restricted(DoNotUse.class)
             @InjectOsAuth
             public ListBoxModel doFillNameItems(
@@ -212,6 +201,45 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
                 return m;
             }
+
+            @Restricted(DoNotUse.class)
+            public FormValidation doCheckName(
+                    @QueryParameter String value,
+                    // authentication fields can be in two places relative to us.
+                    @RelativePath("../..") @QueryParameter("endPointUrl") String endPointUrlCloud,
+                    @RelativePath("../../..") @QueryParameter("endPointUrl") String endPointUrlTemplate,
+                    @RelativePath("../..") @QueryParameter("identity") String identityCloud,
+                    @RelativePath("../../..") @QueryParameter("identity") String identityTemplate,
+                    @RelativePath("../..") @QueryParameter("credential") String credentialCloud,
+                    @RelativePath("../../..") @QueryParameter("credential") String credentialTemplate,
+                    @RelativePath("../..") @QueryParameter("zone") String zoneCloud,
+                    @RelativePath("../../..") @QueryParameter("zone") String zoneTemplate
+            ) {
+                if (Util.fixEmpty(value) == null) return REQUIRED;
+
+                final String endPointUrl = getDefault(endPointUrlCloud, endPointUrlTemplate);
+                final String identity = getDefault(identityCloud, identityTemplate);
+                final String credential = getDefault(credentialCloud, credentialTemplate);
+                final String zone = getDefault(zoneCloud, zoneTemplate);
+                if (!haveAuthDetails(endPointUrl, identity, credential, zone)) return FormValidation.ok();
+
+                List<String> matches;
+                try {
+                    final Openstack openstack = Openstack.Factory.get(endPointUrl, identity, credential, zone);
+                    matches = findMatchingIds(openstack, value);
+                } catch (AuthenticationException | FormValidation | ConnectionException ex) {
+                    LOGGER.log(Level.FINEST, "Openstack call failed", ex);
+                    return FormValidation.warning(ex, "Unable to validate");
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, ex.getMessage(), ex);
+                    return FormValidation.warning(ex, "Unable to validate");
+                }
+
+                final int numberOfMatches = matches.size();
+                if (numberOfMatches < 1 ) return FormValidation.error("Not found");
+                if (numberOfMatches > 1 ) return FormValidation.warning("Multiple matching results");
+                return FormValidation.ok();
+            }
         }
     }
 
@@ -230,21 +258,8 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
         }
 
         @Override
-        public List<String> listAllNames(Openstack openstack) {
-            final Map<String, ?> images = openstack.getVolumeSnapshots();
-            final List<String> allNames = new ArrayList<String>(images.size());
-            allNames.addAll(images.keySet());
-            return allNames;
-        }
-
-        @Override
-        public List<String> findMatchingIds(Openstack openstack, String nameOrId) {
-            return openstack.getVolumeSnapshotIdsFor(nameOrId);
-        }
-
-        @Override
-        public void setServerBootSource(ServerCreateBuilder builder, Openstack os) {
-            List<String> matchingIds = findMatchingIds(os, name);
+        public void setServerBootSource(@Nonnull ServerCreateBuilder builder, @Nonnull Openstack os) {
+            List<String> matchingIds = getDescriptor().findMatchingIds(os, name);
             int size = matchingIds.size();
             // TODO
             if (size == 0) return; // throw new JCloudsCloud.ProvisioningFailedException("No volume snapshot matching " + name + " found");
@@ -268,7 +283,7 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
         }
 
         @Override
-        public void afterProvisioning(Server server, Openstack openstack) {
+        public void afterProvisioning(@Nonnull Server server, @Nonnull Openstack openstack) {
             /*
              * OpenStack creates a Volume for the Instance to boot from but
              * it does not give that Volume a name or description. We do
@@ -307,10 +322,15 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
         }
 
         @Extension
-        public static final class Desc extends Descriptor<BootSource> {
+        public static final class Desc extends BootSourceDescriptor {
             @Override
             public @Nonnull String getDisplayName() {
                 return "Volume Snapshot";
+            }
+
+            @Nonnull @Override
+            public List<String> findMatchingIds(Openstack openstack, String nameOrId) {
+                return openstack.getVolumeSnapshotIdsFor(nameOrId);
             }
 
             @Restricted(DoNotUse.class)
@@ -341,6 +361,45 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
 
                 return m;
             }
+
+            @Restricted(DoNotUse.class)
+            public FormValidation doCheckName(
+                    @QueryParameter String value,
+                    // authentication fields can be in two places relative to us.
+                    @RelativePath("../..") @QueryParameter("endPointUrl") String endPointUrlCloud,
+                    @RelativePath("../../..") @QueryParameter("endPointUrl") String endPointUrlTemplate,
+                    @RelativePath("../..") @QueryParameter("identity") String identityCloud,
+                    @RelativePath("../../..") @QueryParameter("identity") String identityTemplate,
+                    @RelativePath("../..") @QueryParameter("credential") String credentialCloud,
+                    @RelativePath("../../..") @QueryParameter("credential") String credentialTemplate,
+                    @RelativePath("../..") @QueryParameter("zone") String zoneCloud,
+                    @RelativePath("../../..") @QueryParameter("zone") String zoneTemplate
+            ) {
+                if (Util.fixEmpty(value) == null) return REQUIRED;
+
+                final String endPointUrl = getDefault(endPointUrlCloud, endPointUrlTemplate);
+                final String identity = getDefault(identityCloud, identityTemplate);
+                final String credential = getDefault(credentialCloud, credentialTemplate);
+                final String zone = getDefault(zoneCloud, zoneTemplate);
+                if (!haveAuthDetails(endPointUrl, identity, credential, zone)) return FormValidation.ok();
+
+                List<String> matches;
+                try {
+                    final Openstack openstack = Openstack.Factory.get(endPointUrl, identity, credential, zone);
+                    matches = findMatchingIds(openstack, value);
+                } catch (AuthenticationException | FormValidation | ConnectionException ex) {
+                    LOGGER.log(Level.FINEST, "Openstack call failed", ex);
+                    return FormValidation.warning(ex, "Unable to validate");
+                } catch (Exception ex) {
+                    LOGGER.log(Level.SEVERE, ex.getMessage(), ex);
+                    return FormValidation.warning(ex, "Unable to validate");
+                }
+
+                final int numberOfMatches = matches.size();
+                if (numberOfMatches < 1 ) return FormValidation.error("Not found");
+                if (numberOfMatches > 1 ) return FormValidation.warning("Multiple matching results");
+                return FormValidation.ok();
+            }
         }
     }
 
@@ -352,13 +411,6 @@ public abstract class BootSource extends AbstractDescribableImpl<BootSource> imp
     public static final class Unspecified extends BootSource {
         private Unspecified() {} // Never instantiate
 
-        @Override public List<String> listAllNames(Openstack openstack) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override public List<String> findMatchingIds(Openstack openstack, String nameOrId) {
-            throw new UnsupportedOperationException();
-        }
 
         @Extension(ordinal = Double.MAX_VALUE) // Make it first and therefore default
         public static final class Desc extends Descriptor<BootSource> {

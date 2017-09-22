@@ -28,14 +28,12 @@ import com.cloudbees.plugins.credentials.CredentialsNameProvider;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
-import com.google.common.base.Joiner;
 import com.trilead.ssh2.Connection;
 import hudson.Extension;
 import hudson.ExtensionList;
 import hudson.RelativePath;
 import hudson.Util;
 import hudson.model.Computer;
-import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.security.ACL;
@@ -43,10 +41,8 @@ import hudson.security.AccessControlled;
 import hudson.util.ComboBoxModel;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
-import hudson.util.ReflectionUtils;
 import jenkins.model.Jenkins;
 import jenkins.plugins.openstack.compute.internal.Openstack;
-import jenkins.plugins.openstack.compute.slaveopts.BootSource;
 import org.jenkinsci.lib.configprovider.ConfigProvider;
 import org.jenkinsci.lib.configprovider.model.Config;
 import org.kohsuke.accmod.Restricted;
@@ -58,23 +54,13 @@ import org.openstack4j.api.exceptions.AuthenticationException;
 import org.openstack4j.api.exceptions.ConnectionException;
 import org.openstack4j.model.compute.Flavor;
 import org.openstack4j.model.compute.ext.AvailabilityZone;
-import org.springframework.util.StringUtils;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
-import java.lang.annotation.Retention;
-import java.lang.annotation.Target;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import static java.lang.annotation.ElementType.METHOD;
-import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /**
  * @author ogondza.
@@ -82,8 +68,8 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 @Extension @Restricted(NoExternalUse.class)
 public final class SlaveOptionsDescriptor extends OsAuthDescriptor<SlaveOptions> {
     private static final Logger LOGGER = Logger.getLogger(SlaveOptionsDescriptor.class.getName());
-    private static final FormValidation OK = FormValidation.ok();
-    private static final FormValidation REQUIRED = FormValidation.error(hudson.util.Messages.FormValidation_ValidateRequired());
+    public static final FormValidation OK = FormValidation.ok();
+    public static final FormValidation REQUIRED = FormValidation.error(hudson.util.Messages.FormValidation_ValidateRequired());
 
     public SlaveOptionsDescriptor() {
         super(SlaveOptions.class);
@@ -98,7 +84,7 @@ public final class SlaveOptionsDescriptor extends OsAuthDescriptor<SlaveOptions>
         return JCloudsCloud.DescriptorImpl.getDefaultOptions();
     }
 
-    private String getDefault(String d1, Object d2) {
+    public static String getDefault(String d1, Object d2) {
         d1 = Util.fixEmpty(d1);
         if (d1 != null) return d1;
         if (d2 != null) return Util.fixEmpty(String.valueOf(d2));
@@ -244,53 +230,6 @@ public final class SlaveOptionsDescriptor extends OsAuthDescriptor<SlaveOptions>
         return OK;
     }
 
-//    @Restricted(DoNotUse.class)
-//    @InjectOsAuth
-//    /*
-//     * Maintenance note:
-//     * The parameters for this method are messy for a reason.
-//     * A slave template depends on the template's own "bootSource", the cloud-default "bootSource",
-//     * and the template's own "imageId".
-//     * The cloud-default depends on its own "bootSource" and its own "imageId".
-//     * In the case of the slave template, Jenkins can't pass us the values for different fields (one from
-//     * the cloud default, one from the slave template) with the same name.
-//     * If you try, it passes the value from one of those same-named fields field to all parameters that
-//     * requested a field with that name, ignoring the @RelativePath.
-//     * i.e. doFillXXXItems(@QueryParameter String foo, @RelativePath("../../slaveOptions") @QueryParameter("foo") bar)
-//     * does not work as expected - both parameters get passed the same value.
-//     * To workaround this, we have a hidden (non-persisted) second field called "copyOfBootSource" which (always) contains
-//     * the same value as "bootSource" so we can read that (as it's got a different name) from the cloud-default SlaveOptions.
-//     */
-//    public ListBoxModel doFillImageIdItems(
-//            @QueryParameter String bootSource,
-//            @RelativePath("../../slaveOptions") @QueryParameter("copyOfBootSource") String defBootSource,
-//            @QueryParameter String imageId,
-//            @QueryParameter String endPointUrl, @QueryParameter String identity, @QueryParameter String credential, @QueryParameter String zone
-//    ) {
-//        ListBoxModel m = new ListBoxModel();
-//        final String valueOrEmpty = Util.fixNull(imageId);
-//        m.add(new ListBoxModel.Option("None specified", "", valueOrEmpty.isEmpty()));
-//        try {
-//            final BootSource effectiveBS = calcBootSource(bootSource, defBootSource);
-//            if (effectiveBS!=null && haveAuthDetails(endPointUrl, identity, credential, zone)) {
-//                final Openstack openstack = Openstack.Factory.get(endPointUrl, identity, credential, zone);
-//                final List<String> values = effectiveBS.listAllNames(openstack);
-//                for (String value : values) {
-//                    final String displayText = effectiveBS.getDisplayName() + " " + value;
-//                    m.add(displayText, value);
-//                }
-//            }
-//        } catch (AuthenticationException | FormValidation | ConnectionException ex) {
-//            LOGGER.log(Level.FINEST, "Openstack call failed", ex);
-//        } catch (Exception ex) {
-//            LOGGER.log(Level.SEVERE, ex.getMessage(), ex);
-//        }
-//        if (!hasValue(m, valueOrEmpty)) {
-//            m.add(imageId);
-//        }
-//        return m;
-//    }
-//
 //    @Restricted(DoNotUse.class)
 //    public FormValidation doCheckImageId(
 //            @QueryParameter String value,
@@ -635,9 +574,5 @@ public final class SlaveOptionsDescriptor extends OsAuthDescriptor<SlaveOptions>
     @Restricted(DoNotUse.class) // For view
     public @Nonnull String def(@CheckForNull Object val) {
         return val == null ? "" : ("Inherited value: " + val);
-    }
-
-    private static boolean haveAuthDetails(String endPointUrl, String identity, String credential, String zone) {
-        return Util.fixEmpty(endPointUrl)!=null && Util.fixEmpty(identity)!=null && Util.fixEmpty(credential)!=null;
     }
 }

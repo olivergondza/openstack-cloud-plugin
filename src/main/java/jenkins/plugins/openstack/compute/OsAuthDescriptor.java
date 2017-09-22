@@ -24,6 +24,7 @@
 package jenkins.plugins.openstack.compute;
 
 import com.google.common.base.Joiner;
+import hudson.Util;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
 import hudson.util.ListBoxModel;
@@ -104,6 +105,10 @@ public abstract class OsAuthDescriptor<DESCRIBABLE extends Describable<DESCRIBAB
         if (!deps.isEmpty()) {
             attributes.put("fillDependsOn", Joiner.on(' ').join(deps));
         }
+    }
+
+    protected static boolean haveAuthDetails(String endPointUrl, String identity, String credential, String zone) {
+        return Util.fixEmpty(endPointUrl)!=null && Util.fixEmpty(identity)!=null && Util.fixEmpty(credential)!=null;
     }
 
     /**
