@@ -219,61 +219,6 @@ public final class SlaveOptionsDescriptor extends OsAuthDescriptor<SlaveOptions>
         return OK;
     }
 
-//    @Restricted(DoNotUse.class)
-//    public FormValidation doCheckImageId(
-//            @QueryParameter String value,
-//            @RelativePath("../../slaveOptions") @QueryParameter("imageId") String def,
-//            @QueryParameter String bootSource,
-//            @RelativePath("../../slaveOptions") @QueryParameter("copyOfBootSource") String defBootSource,
-//            // authentication fields can be in two places relative to us.
-//            @RelativePath("..") @QueryParameter("endPointUrl") String endPointUrlCloud,
-//            @RelativePath("../..") @QueryParameter("endPointUrl") String endPointUrlTemplate,
-//            @RelativePath("..") @QueryParameter("identity") String identityCloud,
-//            @RelativePath("../..") @QueryParameter("identity") String identityTemplate,
-//            @RelativePath("..") @QueryParameter("credential") String credentialCloud,
-//            @RelativePath("../..") @QueryParameter("credential") String credentialTemplate,
-//            @RelativePath("..") @QueryParameter("zone") String zoneCloud,
-//            @RelativePath("../..") @QueryParameter("zone") String zoneTemplate
-//    ) {
-//        final BootSource effectiveBootSource = calcBootSource(bootSource, defBootSource);
-//        if (Util.fixEmpty(value) != null) {
-//            List<String> matches = null;
-//            try {
-//                final String endPointUrl = getDefault(endPointUrlCloud, endPointUrlTemplate);
-//                final String identity = getDefault(identityCloud, identityTemplate);
-//                final String credential = getDefault(credentialCloud, credentialTemplate);
-//                final String zone = getDefault(zoneCloud, zoneTemplate);
-//                if (effectiveBootSource!=null && haveAuthDetails(endPointUrl, identity, credential, zone)) {
-//                    final Openstack openstack = Openstack.Factory.get(endPointUrl, identity, credential, zone);
-//                    matches = effectiveBootSource.findMatchingIds(openstack, value);
-//                }
-//            } catch (AuthenticationException | FormValidation | ConnectionException ex) {
-//                LOGGER.log(Level.FINEST, "Openstack call failed", ex);
-//                return FormValidation.warning(ex, "Unable to validate.");
-//            } catch (Exception ex) {
-//                LOGGER.log(Level.SEVERE, ex.getMessage(), ex);
-//                return FormValidation.warning(ex, "Unable to validate.");
-//            }
-//            if( matches!=null) {
-//                final int numberOfMatches = matches.size();
-//                if( numberOfMatches < 1 ) return FormValidation.error(effectiveBootSource.getDisplayName()+" \""+value+"\" not found.");
-//                if( numberOfMatches > 1 ) return FormValidation.warning(effectiveBootSource.getDisplayName()+" \""+value+"\" is ambiguous.");
-//                return OK;
-//            }
-//            return FormValidation.warning("Unable to validate.");
-//        }
-//        final BootSource parentBootSource = calcBootSource(defBootSource, defBootSource);
-//        final String effectiveValueOrNull;
-//        if ( effectiveBootSource!=null && parentBootSource!=null && effectiveBootSource.equals(parentBootSource)) {
-//            // our default image is only valid if it's the same bootSource
-//            effectiveValueOrNull = getDefault(def, opts().getImageId());
-//        } else {
-//            effectiveValueOrNull = null;
-//        }
-//        if( effectiveValueOrNull==null ) return REQUIRED;
-//        return FormValidation.ok(def(effectiveValueOrNull));
-//    }
-
     @Restricted(DoNotUse.class)
     @InjectOsAuth
     public ListBoxModel doFillNetworkIdItems(

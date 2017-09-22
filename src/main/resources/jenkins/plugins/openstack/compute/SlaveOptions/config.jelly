@@ -17,7 +17,6 @@
         <div name="slaveOptions" descriptorid="${descriptor.id}">
             <table style="width:100%">
                 <f:section title="Cloud Server Options">
-<!--default="${app.getDescriptor('jenkins.plugins.openstack.compute.slaveopts.BootSource.Unspecified')}"-->
                     <f:dropdownDescriptorSelector field="bootSource" title="Boot Source"/>
                     <f:entry title="Hardware" field="hardwareId">
                         <f:select/>
