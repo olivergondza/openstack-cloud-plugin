@@ -621,7 +621,6 @@ public class Openstack {
         return fixed;
     }
 
-
     /**
      * Extract public address from server info.
      *

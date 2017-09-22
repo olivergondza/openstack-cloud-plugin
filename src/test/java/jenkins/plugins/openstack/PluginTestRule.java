@@ -28,9 +28,11 @@ import hudson.slaves.Cloud;
 import hudson.slaves.CloudProvisioningListener;
 import hudson.slaves.NodeProvisioner;
 import hudson.util.FormValidation;
+import jenkins.model.Jenkins;
 import jenkins.plugins.openstack.compute.SlaveOptions;
 import jenkins.plugins.openstack.compute.UserDataConfig;
 import jenkins.plugins.openstack.compute.slaveopts.BootSource;
+import jenkins.plugins.openstack.compute.slaveopts.LauncherFactory;
 
 import org.jenkinsci.lib.configprovider.ConfigProvider;
 import org.jenkinsci.lib.configprovider.model.Config;
@@ -80,7 +82,7 @@ public final class PluginTestRule extends JenkinsRule {
 
     private final Map<String, Proc> slavesToKill = new HashMap<>();
 
-    // Parallel tests starts Jenkins awfully slow as they deplate the entropy pool. There does not seems to be a way to disable SSHD so let's speed it up at least:
+    // Parallel tests starts Jenkins awfully slow as they deplete the entropy pool. There does not seems to be a way to disable SSHD so let's speed it up at least:
     //         "SSHD.init" #193 daemon prio=5 os_prio=0 tid=0x00007fe700004000 nid=0x7edd runnable [0x00007fe711dd9000]
     //        java.lang.Thread.State: RUNNABLE
     //        at java.io.FileInputStream.readBytes(Native Method)
@@ -111,24 +113,22 @@ public final class PluginTestRule extends JenkinsRule {
         return wc;
     }
 
-    public SlaveOptions dummySlaveOptions() {
-        String userData = "SLAVE_JENKINS_HOME: ${SLAVE_JENKINS_HOME}\n" +
-                "SLAVE_JVM_OPTIONS: ${SLAVE_JVM_OPTIONS}\n" +
-                "JENKINS_URL: ${JENKINS_URL}\n" +
-                "SLAVE_JAR_URL: ${SLAVE_JAR_URL}\n" +
-                "SLAVE_JNLP_URL: ${SLAVE_JNLP_URL}\n" +
-                "SLAVE_JNLP_SECRET: ${SLAVE_JNLP_SECRET}\n" +
-                "SLAVE_LABELS: ${SLAVE_LABELS}\n" +
-                "DO_NOT_REPLACE_THIS: ${unknown} ${VARIABLE}"
-        ;
-        ConfigProvider.all().get(UserDataConfig.UserDataConfigProvider.class).save(
-                new Config("dummyUserDataId", "Fake", "It is a fake", userData)
+    /**
+     * Reusable options instance guaranteed not to collide with defaults
+     */
+    public static SlaveOptions dummySlaveOptions() {
+        if (Jenkins.getInstance() != null) {
+            dummyUserData("dummyUserDataId");
+        }
+        return new SlaveOptions(
+                new BootSource.VolumeSnapshot("id"), "hw", "nw", "dummyUserDataId", 1, "pool", "sg", "az", 1, null, 10,
+                "jvmo", "fsRoot", LauncherFactory.JNLP.JNLP, 1
         );
-        SystemCredentialsProvider.getInstance().getCredentials().add(
-                new BasicSSHUserPrivateKey(
-                        CredentialsScope.SYSTEM, "dummyCredentialId", "john", null, null, "Description"
-                )
-        );
+    }
+
+    public SlaveOptions defaultSlaveOptions() {
+        dummyUserData("dummyUserDataId");
+
         // Use some real-looking values preserving defaults to make sure plugin works with them
         return JCloudsCloud.DescriptorImpl.getDefaultOptions().getBuilder()
                 .bootSource(new BootSource.Image("dummyImageId"))
@@ -139,11 +139,35 @@ public final class PluginTestRule extends JenkinsRule {
                 .availabilityZone("dummyAvailabilityZone")
                 .keyPairName("dummyKeyPairName")
                 .jvmOptions("dummyJvmOptions")
-                .credentialsId("dummyCredentialId")
                 .fsRoot("/tmp/jenkins")
-                .slaveType(JCloudsCloud.SlaveType.JNLP)
+                .launcherFactory(LauncherFactory.JNLP.JNLP)
                 .build()
         ;
+    }
+
+    private static void dummyUserData(String id) {
+        String userData = "SLAVE_JENKINS_HOME: ${SLAVE_JENKINS_HOME}\n" +
+                "SLAVE_JVM_OPTIONS: ${SLAVE_JVM_OPTIONS}\n" +
+                "JENKINS_URL: ${JENKINS_URL}\n" +
+                "SLAVE_JAR_URL: ${SLAVE_JAR_URL}\n" +
+                "SLAVE_JNLP_URL: ${SLAVE_JNLP_URL}\n" +
+                "SLAVE_JNLP_SECRET: ${SLAVE_JNLP_SECRET}\n" +
+                "SLAVE_LABELS: ${SLAVE_LABELS}\n" +
+                "DO_NOT_REPLACE_THIS: ${unknown} ${VARIABLE}"
+        ;
+        ConfigProvider.all().get(UserDataConfig.UserDataConfigProvider.class).save(
+                new Config(id, "Fake", "It is a fake", userData)
+        );
+    }
+
+    public String dummySshCredential(String id) {
+        SystemCredentialsProvider.getInstance().getCredentials().add(
+                new BasicSSHUserPrivateKey(
+                        CredentialsScope.SYSTEM, id, "john " + id, null, null, "Description " + id
+                )
+        );
+
+        return id;
     }
 
     public void autoconnectJnlpSlaves() {
@@ -476,7 +500,7 @@ public final class PluginTestRule extends JenkinsRule {
         // Should not be more specific than JCloudsCloud.DescriptorImpl#DEFAULTS
         private static final SlaveOptions DEFAULTS = SlaveOptions.builder()
                 .fsRoot("/tmp/jenkins")
-                .slaveType(SlaveType.JNLP)
+                .launcherFactory(LauncherFactory.JNLP.JNLP)
                 .build()
         ;
 
@@ -500,8 +524,11 @@ public final class PluginTestRule extends JenkinsRule {
             return new Descriptor();
         }
 
-        @Override public boolean isSlaveReadyToLaunch(@Nonnull JCloudsSlave slave) {
-            return true;
+        @Override public @CheckForNull String slaveIsWaitingFor(@Nonnull JCloudsSlave slave) {
+            if (slave.getSlaveOptions().getLauncherFactory() instanceof LauncherFactory.SSH) {
+                return null; // Pretend success as we fake the connection by JNLP and waiting for IP:PORT is doomed to fail
+            }
+            return super.slaveIsWaitingFor(slave);
         }
 
         public static final class Descriptor extends hudson.model.Descriptor<Cloud> {

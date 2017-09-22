@@ -27,6 +27,7 @@ import hudson.Util;
 import hudson.model.Describable;
 import jenkins.model.Jenkins;
 import jenkins.plugins.openstack.compute.slaveopts.BootSource;
+import jenkins.plugins.openstack.compute.slaveopts.LauncherFactory;
 import org.apache.commons.lang.builder.ToStringBuilder;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -46,7 +47,7 @@ import java.io.Serializable;
  */
 public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     private static final long serialVersionUID = -1L;
-    private static final SlaveOptions EMPTY = new SlaveOptions(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+    private static final SlaveOptions EMPTY = new SlaveOptions(null, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
 
     // Provisioning attributes
     private /*final*/ @CheckForNull BootSource bootSource;
@@ -64,8 +65,12 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
     private final Integer numExecutors;
     private final @CheckForNull String jvmOptions;
     private final String fsRoot;
-    private final @CheckForNull String credentialsId;
-    private final JCloudsCloud.SlaveType slaveType;
+    private /*final*/ LauncherFactory launcherFactory;
+
+    // Moved into LauncherFactory. Converted to string for the ease of conversion. Note that due to inheritance implemented,
+    // the migration needs to be implemented by the holder so this is package protected.
+    /*package*/ @Deprecated transient String slaveType;
+    /*package*/ @Deprecated transient String credentialsId;
 
     // Slave attributes
     private final Integer retentionTime;
@@ -125,12 +130,8 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
         return jvmOptions;
     }
 
-    public @CheckForNull String getCredentialsId() {
-        return credentialsId;
-    }
-
-    public JCloudsCloud.SlaveType getSlaveType() {
-        return slaveType;
+    public LauncherFactory getLauncherFactory() {
+        return launcherFactory;
     }
 
     public Integer getRetentionTime() {
@@ -152,8 +153,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
                 b.numExecutors,
                 b.jvmOptions,
                 b.fsRoot,
-                b.credentialsId,
-                b.slaveType,
+                b.launcherFactory,
                 b.retentionTime
         );
     }
@@ -173,8 +173,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
             Integer numExecutors,
             String jvmOptions,
             String fsRoot,
-            String credentialsId,
-            JCloudsCloud.SlaveType slaveType,
+            LauncherFactory launcherFactory,
             Integer retentionTime
     ) {
         this.bootSource = bootSource;
@@ -190,8 +189,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
         this.numExecutors = numExecutors;
         this.jvmOptions = Util.fixEmpty(jvmOptions);
         this.fsRoot = Util.fixEmpty(fsRoot);
-        this.credentialsId = Util.fixEmpty(credentialsId);
-        this.slaveType = slaveType;
+        this.launcherFactory = launcherFactory;
         this.retentionTime = retentionTime;
     }
 
@@ -221,8 +219,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
                 .numExecutors(_override(this.numExecutors, o.numExecutors))
                 .jvmOptions(_override(this.jvmOptions, o.jvmOptions))
                 .fsRoot(_override(this.fsRoot, o.fsRoot))
-                .credentialsId(_override(this.credentialsId, o.credentialsId))
-                .slaveType(_override(this.slaveType, o.slaveType))
+                .launcherFactory(_override(this.launcherFactory, o.launcherFactory))
                 .retentionTime(_override(this.retentionTime, o.retentionTime))
                 .build()
         ;
@@ -250,8 +247,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
                 .numExecutors(_erase(this.numExecutors, defaults.numExecutors))
                 .jvmOptions(_erase(this.jvmOptions, defaults.jvmOptions))
                 .fsRoot(_erase(this.fsRoot, defaults.fsRoot))
-                .credentialsId(_erase(this.credentialsId, defaults.credentialsId))
-                .slaveType(_erase(this.slaveType, defaults.slaveType))
+                .launcherFactory(_erase(this.launcherFactory, defaults.launcherFactory))
                 .retentionTime(_erase(this.retentionTime, defaults.retentionTime))
                 .build()
         ;
@@ -280,8 +276,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
                 .append("numExecutors", numExecutors)
                 .append("jvmOptions", jvmOptions)
                 .append("fsRoot", fsRoot)
-                .append("credentialsId", credentialsId)
-                .append("slaveType", slaveType)
+                .append("launcherFactory", launcherFactory)
                 .append("retentionTime", retentionTime)
                 .toString()
         ;
@@ -307,8 +302,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
         if (numExecutors != null ? !numExecutors.equals(that.numExecutors) : that.numExecutors != null) return false;
         if (jvmOptions != null ? !jvmOptions.equals(that.jvmOptions) : that.jvmOptions != null) return false;
         if (fsRoot != null ? !fsRoot.equals(that.fsRoot) : that.fsRoot != null) return false;
-        if (credentialsId != null ? !credentialsId.equals(that.credentialsId) : that.credentialsId != null) return false;
-        if (slaveType != that.slaveType) return false;
+        if (launcherFactory != null ? !launcherFactory.equals(that.launcherFactory) : that.launcherFactory != null) return false;
         return retentionTime != null ? retentionTime.equals(that.retentionTime) : that.retentionTime == null;
 
     }
@@ -328,8 +322,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
         result = 31 * result + (numExecutors != null ? numExecutors.hashCode() : 0);
         result = 31 * result + (jvmOptions != null ? jvmOptions.hashCode() : 0);
         result = 31 * result + (fsRoot != null ? fsRoot.hashCode() : 0);
-        result = 31 * result + (credentialsId != null ? credentialsId.hashCode() : 0);
-        result = 31 * result + (slaveType != null ? slaveType.hashCode() : 0);
+        result = 31 * result + (launcherFactory != null ? launcherFactory.hashCode() : 0);
         result = 31 * result + (retentionTime != null ? retentionTime.hashCode() : 0);
         return result;
     }
@@ -352,8 +345,7 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
                 .numExecutors(numExecutors)
                 .jvmOptions(jvmOptions)
                 .fsRoot(fsRoot)
-                .credentialsId(credentialsId)
-                .slaveType(slaveType)
+                .launcherFactory(launcherFactory)
                 .retentionTime(retentionTime)
         ;
     }
@@ -384,9 +376,8 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
         private @CheckForNull Integer numExecutors;
         private @CheckForNull String jvmOptions;
         private @CheckForNull String fsRoot;
-        private @CheckForNull String credentialsId;
 
-        private @CheckForNull JCloudsCloud.SlaveType slaveType;
+        private @CheckForNull LauncherFactory launcherFactory;
         private @CheckForNull Integer retentionTime;
 
         public Builder() {}
@@ -460,13 +451,8 @@ public class SlaveOptions implements Describable<SlaveOptions>, Serializable {
             return this;
         }
 
-        public @Nonnull Builder credentialsId(String credentialsId) {
-            this.credentialsId = credentialsId;
-            return this;
-        }
-
-        public @Nonnull Builder slaveType(JCloudsCloud.SlaveType slaveType) {
-            this.slaveType = slaveType;
+        public @Nonnull Builder launcherFactory(LauncherFactory launcherFactory) {
+            this.launcherFactory = launcherFactory;
             return this;
         }
 

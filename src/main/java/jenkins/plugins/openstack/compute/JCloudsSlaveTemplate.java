@@ -15,6 +15,7 @@ import com.google.common.base.Charsets;
 import hudson.remoting.Base64;
 import jenkins.plugins.openstack.compute.internal.DestroyMachine;
 import jenkins.plugins.openstack.compute.slaveopts.BootSource;
+import jenkins.plugins.openstack.compute.slaveopts.LauncherFactory;
 import org.jenkinsci.lib.configprovider.ConfigProvider;
 import org.jenkinsci.lib.configprovider.model.Config;
 import org.jenkinsci.plugins.cloudstats.ProvisioningActivity;
@@ -79,7 +80,7 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
     private transient @Deprecated String networkId;
     private transient @Deprecated String securityGroups;
     private transient @Deprecated String credentialsId;
-    private transient @Deprecated JCloudsCloud.SlaveType slaveType;
+    private transient @Deprecated String slaveType; // Converted to string long after deprecated while converting enum to describable
     private transient @Deprecated String availabilityZone;
 
     @DataBoundConstructor
@@ -94,7 +95,7 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
     }
 
     @SuppressWarnings("deprecation")
-    protected Object readResolve() {
+    private Object readResolve() {
         // Initializes data structure that we don't persist.
         labelSet = Label.parse(labelString);
 
@@ -114,9 +115,16 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 
         // Migrate from 2.0 to 2.1
         if (slaveOptions == null) {
+            LauncherFactory lf = null;
+            if ("SSH".equals(slaveType) || credentialsId != null) {
+                lf = new LauncherFactory.SSH(credentialsId);
+            } else if("JNLP".equals(slaveType)) {
+                lf = LauncherFactory.JNLP.JNLP;
+            }
+
             slaveOptions = SlaveOptions.builder().bootSource(new BootSource.Image(imageId)).hardwareId(hardwareId).numExecutors(Integer.getInteger(numExecutors)).jvmOptions(jvmOptions).userDataId(userDataId)
                     .fsRoot(fsRoot).retentionTime(overrideRetentionTime).keyPairName(keyPairName).networkId(networkId).securityGroups(securityGroups)
-                    .credentialsId(credentialsId).slaveType(slaveType).availabilityZone(availabilityZone).build()
+                    .launcherFactory(lf).availabilityZone(availabilityZone).build()
             ;
 
             this.hardwareId = null;
@@ -131,6 +139,21 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
             this.credentialsId = null;
             this.slaveType = null;
             this.availabilityZone = null;
+        }
+
+        // Migrate from 2.24 to 2.25
+        if (slaveOptions.slaveType != null) {
+            LauncherFactory lf = null;
+            if ("JNLP".equals(slaveOptions.slaveType)) {
+                lf = LauncherFactory.JNLP.JNLP;
+                slaveOptions.slaveType = null;
+            } else if ("SSH".equals(slaveOptions.slaveType)) {
+                lf = new LauncherFactory.SSH(slaveOptions.credentialsId);
+                slaveOptions.slaveType = slaveOptions.credentialsId = null;
+            }
+            if (lf != null) {
+                slaveOptions = slaveOptions.getBuilder().launcherFactory(lf).build();
+            }
         }
 
         return this;
@@ -182,9 +205,10 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
             JCloudsSlave node = new JCloudsSlave(id, nodeMetadata, labelString, opts);
 
             int timeout = node.getSlaveOptions().getStartTimeout();
-            String timeoutMessage = String.format("Failed to connect to slave %s within timeout (%d ms).", node.getNodeName(), timeout);
-            while (!cloud.isSlaveReadyToLaunch(node)) {
+            String cause;
+            while ((cause = cloud.slaveIsWaitingFor(node)) != null) {
                 if ((System.currentTimeMillis() - node.getCreatedTime()) > timeout) {
+                    String timeoutMessage = String.format("Failed to connect agent %s within timeout (%d ms): %s", node.getNodeName(), timeout, cause);
                     LOGGER.warning(timeoutMessage);
                     node.terminate();
                     throw new JCloudsCloud.ProvisioningFailedException(timeoutMessage);
