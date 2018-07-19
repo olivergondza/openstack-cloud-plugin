@@ -126,6 +126,7 @@ public class JCloudsRetentionStrategy extends RetentionStrategy<JCloudsComputer>
         if (computer instanceof JCloudsComputer) {
             final JCloudsComputer cloudComputer = (JCloudsComputer) computer;
             if (cloudComputer == null) return;
+
             final JCloudsSlave node = cloudComputer.getNode();
             if (node == null) return;
             final int retentionTime = node.getSlaveOptions().getRetentionTime();
