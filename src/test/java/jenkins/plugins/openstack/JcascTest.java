@@ -42,7 +42,6 @@ import org.junit.Rule;
 import org.junit.Test;
 
 import java.net.URISyntaxException;
-import java.util.Collections;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.allOf;
@@ -105,6 +104,7 @@ public class JcascTest {
             assertEquals("/tmp/foo", co.getFsRoot());
             assertEquals(((Integer) 42), co.getRetentionTime());
             LauncherFactory.SSH lf = (LauncherFactory.SSH) co.getLauncherFactory();
+            assertEquals(PluginTestRule.mkListOfNodeProperties(1,3), co.getNodeProperties());
             assertEquals("/bin/true", lf.getJavaPath());
             assertEquals("openstack_ssh_key", lf.getCredentialsId());
             BasicSSHUserPrivateKey sshcreds = PluginTestRule.extractSshCredentials(lf);
@@ -126,6 +126,9 @@ public class JcascTest {
         BootSource.VolumeFromImage vfi = (BootSource.VolumeFromImage) c.getTemplate("volumeFromImage").getRawSlaveOptions().getBootSource();
         assertEquals("Volume name", vfi.getName());
         assertEquals(15, vfi.getVolumeSize());
+
+        JCloudsSlaveTemplate templateWithCustomNodeProperties = c.getTemplate("customNodeProperties");
+        assertEquals(PluginTestRule.mkListOfNodeProperties(2), templateWithCustomNodeProperties.getRawSlaveOptions().getNodeProperties());
     }
 
     @Test
