@@ -122,15 +122,15 @@ public final class PluginTestRule extends JenkinsRule {
         );
     }
 
-    public static List<NodeProperty<Node>> mkListOfNodeProperties(int... npTypes) {
-        final Builder<NodeProperty<Node>> b = ImmutableList.builder();
+    public static List<NodeProperty<?>> mkListOfNodeProperties(int... npTypes) {
+        final Builder<NodeProperty<?>> b = ImmutableList.builder();
         for (int number : npTypes) {
             b.add(mkNodeProperty(number));
         }
         return b.build();
     }
 
-    public static NodeProperty<Node> mkNodeProperty(int number) {
+    private static NodeProperty<Node> mkNodeProperty(int number) {
         switch (number) {
         case 1:
             return new NodePropertyOne();
